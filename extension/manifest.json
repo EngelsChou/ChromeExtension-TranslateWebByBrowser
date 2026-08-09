@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Translate Web by ChatGPT Browser",
+  "version": "0.1.0",
+  "description": "Translate visible English text nodes into Taiwan Traditional Chinese through your signed-in ChatGPT browser session.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:17373/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Translate Web by ChatGPT Browser",
+    "default_popup": "popup.html"
+  },
+  "minimum_chrome_version": "120"
+}
