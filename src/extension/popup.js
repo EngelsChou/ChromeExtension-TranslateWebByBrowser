@@ -3,6 +3,7 @@ const elements = {
   title: document.querySelector('#status-title'),
   detail: document.querySelector('#status-detail'),
   translate: document.querySelector('#translate'),
+  connect: document.querySelector('#connect'),
   restore: document.querySelector('#restore'),
   error: document.querySelector('#error'),
   progress: document.querySelector('#progress'),
@@ -20,15 +21,22 @@ function showError(message) {
   elements.error.hidden = !message;
 }
 
+function showConnectionState(ready) {
+  elements.translate.disabled = !ready;
+  elements.connect.hidden = ready;
+}
+
 async function checkStatus() {
-  const result = await chrome.runtime.sendMessage({ type: 'GET_BRIDGE_STATUS' });
+  const result = await chrome.runtime.sendMessage({ type: 'GET_CHATGPT_STATUS' });
   if (result.ok && result.chatgptReady) {
-    setStatus('ok', '已連線', 'ChatGPT 分頁已登入並可接收翻譯');
-    elements.translate.disabled = false;
+    setStatus('ok', '已連線', '將使用同一個 Chrome 中已登入的 ChatGPT 分頁');
+    showConnectionState(true);
   } else if (result.ok) {
-    setStatus('pending', 'Bridge 已啟動', result.message || '請先開啟並登入 ChatGPT');
+    setStatus('pending', '需要登入 ChatGPT', result.message);
+    showConnectionState(false);
   } else {
-    setStatus('error', '尚未連線', result.error || '請先執行 npm run bridge');
+    setStatus('error', '無法連線 ChatGPT', result.error);
+    showConnectionState(false);
   }
 }
 
@@ -37,6 +45,13 @@ chrome.runtime.onMessage.addListener((message) => {
   elements.progress.hidden = false;
   elements.progressBar.style.width = `${Math.round((message.completed / message.total) * 100)}%`;
   setStatus('pending', '翻譯中…', `批次 ${message.completed}/${message.total}，已替換 ${message.translated}/${message.nodes} 段`);
+});
+
+elements.connect.addEventListener('click', async () => {
+  showError('');
+  const result = await chrome.runtime.sendMessage({ type: 'OPEN_CHATGPT' });
+  if (!result.ok) showError(result.error);
+  else window.close();
 });
 
 elements.translate.addEventListener('click', async () => {
@@ -50,7 +65,7 @@ elements.translate.addEventListener('click', async () => {
     elements.progressBar.style.width = '100%';
     setStatus('ok', '翻譯完成', result.message || `已翻譯 ${result.translated}/${result.total} 段文字`);
   } else {
-    setStatus('error', '翻譯失敗', '頁面未變更的批次可重新嘗試');
+    setStatus('error', '翻譯失敗', '已完成的批次仍可由「恢復原文」還原');
     showError(result.error);
   }
   elements.translate.disabled = false;
@@ -66,4 +81,5 @@ elements.restore.addEventListener('click', async () => {
 checkStatus().catch((error) => {
   setStatus('error', '狀態檢查失敗', '無法存取 background service worker');
   showError(error.message);
+  showConnectionState(false);
 });

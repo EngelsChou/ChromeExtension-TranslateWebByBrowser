@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTranslationResponse } from '../bridge/response-parser.js';
+import { parseTranslationResponse, validateTranslations } from '../src/extension/chatgpt-core.js';
 
 const expected = [
   { id: 'tn-one', text: 'Hello' },
@@ -22,4 +22,12 @@ test('rejects missing, duplicate, and unknown IDs', () => {
 test('rejects prose-only and empty translations', () => {
   assert.throws(() => parseTranslationResponse('Here are the translations.', expected), /不是有效/u);
   assert.throws(() => parseTranslationResponse('{"translations":[{"id":"tn-one","text":""},{"id":"tn-two","text":"世界"}]}', expected), /空白/u);
+});
+
+test('revalidates structured translations before applying them', () => {
+  assert.deepEqual(validateTranslations([
+    { id: 'tn-one', text: '哈囉' },
+    { id: 'tn-two', text: '世界' },
+  ], expected).map(({ id }) => id), ['tn-one', 'tn-two']);
+  assert.throws(() => validateTranslations([{ id: 'tn-one', text: '哈囉' }], expected), /缺少/u);
 });

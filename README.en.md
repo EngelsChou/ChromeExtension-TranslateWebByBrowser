@@ -1,104 +1,95 @@
 # Translate Web by ChatGPT Browser
 
-A Manifest V3 Chrome Extension that translates visible English text nodes on the current page in place into Taiwan Traditional Chinese through an authenticated ChatGPT web session. It does not use the OpenAI API and does not support Claude, Gemini, or any other provider.
+A self-contained Manifest V3 Chrome Extension. It captures visible English text nodes on the current page, translates them into Taiwan Traditional Chinese through a signed-in ChatGPT tab in the same Chrome profile, and replaces them in place. It does not use the OpenAI API, a localhost bridge, Native Messaging, a Node.js runtime, or another AI provider.
 
 [繁體中文](README.md)
+
+## Regular users do not need npm
+
+Normal use only requires loading the extension:
+
+1. Download and extract `translate-web-by-chatgpt-browser-v0.2.0.zip`.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Select **Load unpacked** and choose the extracted folder.
+
+No terminal, command, or Node.js installation is required afterward. npm commands are only for developers changing the source code.
+
+## Usage
+
+1. Select the extension icon on the webpage to translate.
+2. The extension finds or creates a `chatgpt.com` tab in the background.
+3. On first use, select **Open ChatGPT to sign in**, complete sign-in in that tab, and return to the original page.
+4. Open the popup again and select **Translate current page**.
+5. Select **Restore original** to restore text nodes translated during the current page lifetime.
+
+The normal Chrome profile retains the ChatGPT sign-in. Future use only requires selecting the extension; no service needs to be started.
 
 ## Architecture
 
 ```text
 Current webpage
-  └─ content script: visibility/English filters, stable IDs, originals, in-place DOM updates
-       └─ MV3 background: batches by item and character limits
-            └─ thin bridge at http://127.0.0.1:17373
-                 └─ official chrome-devtools-mcp 1.6.0 experimental CLI
-                      └─ dedicated persistent Chrome profile → signed-in chatgpt.com
+  └─ target content script
+       ├─ filters visible, primarily English text nodes in the viewport
+       ├─ creates and retains stable ID mappings
+       └─ stores originals, applies translations, and restores originals
+             ↕ Chrome runtime messaging
+       Manifest V3 service worker
+       ├─ finds or opens a background ChatGPT tab
+       ├─ sends text in batches
+       └─ revalidates IDs and schema before applying results
+             ↕ Chrome runtime messaging
+       ChatGPT content script
+       ├─ operates the signed-in ChatGPT composer
+       ├─ requests strict JSON
+       ├─ waits for the complete response and retries once
+       └─ rejects missing, duplicate, unknown IDs, invalid types, and empty text
 ```
 
-The extension sends only `{id, text}` to the local bridge, never the whole HTML document. The bridge requests the strict schema `{"translations":[{"id","text"}]}` and rejects missing, duplicate, unknown IDs, empty translations, and invalid types. Requests are serialized so replies from multiple pages cannot overlap.
+A batch contains at most 30 segments and about 6,000 characters. Only `{id, text}` is sent to ChatGPT, never the full HTML document.
 
-## Requirements
+## Collection and restore behavior
 
-- Current stable Google Chrome (other Chromium browsers are not guaranteed by `chrome-devtools-mcp`)
-- Node.js 22 or newer and npm
-- A ChatGPT account that can sign in and send messages
-- Local port `127.0.0.1:17373`
+The scanner skips:
 
-The project pins `chrome-devtools-mcp` 1.6.0. See its [official README](https://github.com/ChromeDevTools/chrome-devtools-mcp) for supported browsers and browser-data risks. Its [CLI documentation](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md) explicitly labels the CLI experimental.
+- off-viewport or CSS-hidden content
+- `script`, `style`, `svg`, `canvas`, and code blocks
+- form controls and editable regions
+- URLs, email addresses, and numeric-only content
+- text that is not primarily Latin-script
 
-## Installation and ChatGPT connection
+Text node IDs derive from the page path, DOM position, and original text. Repeated scans reuse the existing mapping for the same node. Originals remain in content-script memory and are not written into the page HTML or uploaded. SPA rerenders may overwrite translations; run translation again after scrolling to newly visible content.
 
-1. Install and verify:
+## Permissions, security, and privacy
 
-   ```powershell
-   npm install
-   npm run check
-   npm run package
-   ```
-
-2. Start the dedicated Chrome session:
-
-   ```powershell
-   npm run chatgpt:start
-   ```
-
-   The official CLI opens Chrome with `.chatgpt-profile/` and navigates to `https://chatgpt.com/`. On first use, sign in and complete any verification manually in that window, then keep it open. The local profile is ignored by Git.
-
-3. Start the local bridge in a second terminal:
-
-   ```powershell
-   npm run bridge
-   ```
-
-4. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select:
-
-   ```text
-   <repository>\dist\extension
-   ```
-
-   You can also extract `dist/release/translate-web-by-chatgpt-browser-v0.1.0.zip` and load it. The ZIP root is Chrome Extension release-ready; the local bridge must still be run from the repository.
-
-## Usage
-
-1. Keep the dedicated signed-in ChatGPT Chrome window and the bridge running.
-2. Open the popup on the page to translate.
-3. When it reports **Connected**, select **Translate current page**.
-4. Select **Restore original** to restore text nodes translated during the current page lifetime.
-
-The scanner skips hidden and off-viewport content, form controls, editable areas, code, `script/style/svg`, URL/email/numeric-only text, and content that is not primarily Latin-script. Run translation again after scrolling or an SPA update; detached old nodes are cleaned up.
-
-## Security and privacy
-
-- Only filtered visible English plain text and locally generated IDs are sent to ChatGPT. HTML, cookies, browser storage, and form values are not sent.
-- Webpage text is treated as untrusted. The prompt says to ignore instructions inside text and translate it as data. This reduces but cannot eliminate prompt-injection risk.
-- The bridge binds only to loopback and rejects browser origins other than `chrome-extension://`. Optionally lock it to one unpacked extension ID:
-
-  ```powershell
-  $env:BRIDGE_EXTENSION_ID='your-extension-id'
-  npm run bridge
-  ```
-
-- The dedicated profile retains ChatGPT sign-in state. Never share `.chatgpt-profile/`, and do not browse other sensitive sites in that window.
-- The user explicitly starts local processes; the Chrome Extension never attempts to launch an executable.
-- Inputs and outputs remain subject to the ChatGPT plan, OpenAI policies, usage limits, and data controls. Do not use this project to bypass restrictions.
+- `activeTab`: accesses the current page only after the user selects the extension.
+- `scripting`: injects the current-page translator and reconnects to an already-open ChatGPT tab when needed.
+- `https://chatgpt.com/*` and `https://chat.openai.com/*`: finds, opens, and operates the user's own ChatGPT tab.
+- The extension has no `<all_urls>`, localhost, Native Messaging, or local executable permission.
+- Webpage text is treated as untrusted data. The prompt says to ignore instructions inside the text and translate it as data. This reduces but cannot eliminate prompt-injection risk.
+- Translation text and ChatGPT responses pass through the user's ChatGPT account and may remain in that conversation history. The user's ChatGPT plan, data controls, policies, and usage limits apply.
+- Do not translate confidential, personal, or third-party material that you are not authorized to send to ChatGPT.
 
 ## Known limitations
 
-- ChatGPT does not expose a stable, official web-automation API for this project. This mode operates the live UI and may break when ChatGPT changes its DOM, sign-in flow, verification, or control labels.
-- The official `chrome-devtools-mcp` CLI remains experimental. Version 1.6.0 is pinned and upgrades should be fully retested.
-- ChatGPT can return invalid JSON, omit items, or time out. The bridge validates and retries once, then stops the batch with an error rather than applying unverified output.
-- Only English text nodes visible in the viewport are translated. Lazy-loaded content requires another translation run after scrolling.
-- Shadow DOM, cross-origin iframes, canvas, image text, placeholders, `aria-label`, and attributes are not translated.
-- Dynamic frameworks may overwrite translated DOM during rerenders. Restore works only while the same content script and connected nodes remain alive.
-- A batch contains at most 30 segments and about 6,000 characters. Speed and capacity depend on the ChatGPT web session.
+- This automates the ChatGPT web UI; it is not an official OpenAI API. Changes to ChatGPT's DOM, sign-in flow, verification, controls, or message structure may require an extension update.
+- First use still requires the user to sign in personally. The extension does not read or store passwords, cookies, or tokens.
+- The ChatGPT tab must remain open. The extension reuses it and prevents automatic discarding; if closed, a new tab is created next time.
+- Chrome may throttle a background tab, so speed depends on browser and ChatGPT state.
+- ChatGPT can return invalid JSON, omit items, reach a usage limit, or time out. The extension retries once and then stops the batch rather than applying unvalidated output.
+- Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and other attributes are not translated.
+- After dynamic rerenders, restore only applies to connected nodes retained by the same content script.
 
-## Development, tests, and packaging
+## Development
+
+Node.js 22 or newer and npm are only needed to modify or package the source:
 
 ```powershell
+npm install
 npm run build
 npm run lint
 npm test
 npm run package
 ```
 
-`npm run check` runs build, lint, and test in order. The release ZIP is written to `dist/release/`. Use `npm run chatgpt:stop` to stop the dedicated browser daemon and `npm run chatgpt:status` to inspect it.
+`npm run check` runs build, lint, and test in order. The unpacked build is written to `dist/extension/`, and the release ZIP to `dist/release/translate-web-by-chatgpt-browser-v0.2.0.zip`.

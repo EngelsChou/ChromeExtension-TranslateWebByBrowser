@@ -59,7 +59,8 @@ if (!globalThis.__translateWebContentReady) {
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type === 'COLLECT_TEXT_NODES') sendResponse({ items: collect() });
+    if (message?.type === 'PING_TRANSLATOR') sendResponse({ ready: true });
+    else if (message?.type === 'COLLECT_TEXT_NODES') sendResponse({ items: collect() });
     else if (message?.type === 'APPLY_TRANSLATIONS') sendResponse({ applied: apply(message.translations ?? []) });
     else if (message?.type === 'RESTORE_TEXT_NODES') sendResponse({ restored: restore() });
   });

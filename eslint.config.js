@@ -17,7 +17,7 @@ export default [
     },
   },
   {
-    files: ['bridge/**/*.js', 'scripts/**/*.mjs', 'test/**/*.js'],
+    files: ['scripts/**/*.mjs', 'test/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

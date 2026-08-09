@@ -30,6 +30,15 @@ await Promise.all([
     legalComments: 'none',
   }),
   build({
+    entryPoints: [path.join(root, 'src', 'extension', 'chatgpt-content-entry.js')],
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'chrome120',
+    outfile: path.join(output, 'chatgpt-content.js'),
+    legalComments: 'none',
+  }),
+  build({
     entryPoints: [path.join(root, 'src', 'extension', 'popup.js')],
     bundle: true,
     format: 'iife',

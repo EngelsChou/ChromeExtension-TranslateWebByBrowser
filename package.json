@@ -1,8 +1,8 @@
 {
   "name": "translate-web-by-chatgpt-browser",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Manifest V3 Chrome extension that translates visible English text nodes through an authenticated ChatGPT browser session.",
+  "description": "Self-contained Manifest V3 extension that translates visible English text nodes through a signed-in ChatGPT tab.",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -12,15 +12,7 @@
     "lint": "eslint .",
     "test": "node --test",
     "check": "npm run build && npm run lint && npm test",
-    "package": "node scripts/package.mjs",
-    "smoke:cli": "node scripts/smoke-cli.mjs",
-    "bridge": "node bridge/server.js",
-    "chatgpt:start": "node bridge/cli.js start",
-    "chatgpt:stop": "node bridge/cli.js stop",
-    "chatgpt:status": "node bridge/cli.js status"
-  },
-  "dependencies": {
-    "chrome-devtools-mcp": "1.6.0"
+    "package": "node scripts/package.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.32.0",

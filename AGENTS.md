@@ -5,5 +5,5 @@
 - Keep both `README.md` (Traditional Chinese) and `README.en.md` (English) current whenever behavior, setup, architecture, limitations, or security guidance changes.
 - Generate a Chrome Extension release ZIP after every releasable change and keep it in `dist/release/`.
 - Never silently stage or overwrite unrelated user changes.
-- The extension must not launch local executables. Local bridge processes are started explicitly by the user.
+- Keep the shipped product self-contained in the Chrome Extension. Do not require a local bridge, native host, executable, Node.js, npm, or command-line startup for normal use.
 - Do not add OpenAI API, Claude, Gemini, or any provider other than the authenticated ChatGPT web connection mode without explicit user approval.
