@@ -1,95 +1,77 @@
-# Translate Web by ChatGPT Browser
+# Translate Web by Browser AI
 
-A self-contained Manifest V3 Chrome Extension. It captures visible English text nodes on the current page, translates them into Taiwan Traditional Chinese through a signed-in ChatGPT tab in the same Chrome profile, and replaces them in place. It does not use the OpenAI API, a localhost bridge, Native Messaging, a Node.js runtime, or another AI provider.
+A self-contained Manifest V3 Chrome Extension. It captures visible English text nodes, translates them into Taiwan Traditional Chinese through a signed-in **ChatGPT** or **Microsoft 365 Copilot** webpage selected by the user, and replaces the text in place. Normal use requires no npm, Node.js, command, localhost bridge, Native Messaging, or AI API.
 
 [繁體中文](README.md)
 
-## Regular users do not need npm
+## Installation (regular users do not need npm)
 
-Normal use only requires loading the extension:
+1. Download and extract `translate-web-by-browser-ai-v0.3.0.zip`.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Select **Load unpacked** and choose the extracted folder containing `manifest.json`.
 
-1. Download and extract `translate-web-by-chatgpt-browser-v0.2.0.zip`.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Select **Load unpacked** and choose the extracted folder.
-
-No terminal, command, or Node.js installation is required afterward. npm commands are only for developers changing the source code.
+After installation, use only the extension icon; no command needs to be run for each use. npm is only for developers modifying and repackaging the source.
 
 ## Usage
 
 1. Select the extension icon on the webpage to translate.
-2. The extension finds or creates a `chatgpt.com` tab in the background.
-3. On first use, select **Open ChatGPT to sign in**, complete sign-in in that tab, and return to the original page.
-4. Open the popup again and select **Translate current page**.
+2. Choose `ChatGPT` or `Microsoft 365 Copilot`; the selection is retained in local Chrome storage.
+3. On first use, open the provider tab and personally complete sign-in, MFA, or organizational verification.
+4. Return to the original page, reopen the popup, and select **Translate current page**.
 5. Select **Restore original** to restore text nodes translated during the current page lifetime.
 
-The normal Chrome profile retains the ChatGPT sign-in. Future use only requires selecting the extension; no service needs to be started.
+ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. The extension reuses the matching tab. If its composer contains a draft, it opens a fresh conversation rather than overwriting user text.
 
 ## Architecture
 
 ```text
-Current webpage
-  └─ target content script
-       ├─ filters visible, primarily English text nodes in the viewport
-       ├─ creates and retains stable ID mappings
-       └─ stores originals, applies translations, and restores originals
-             ↕ Chrome runtime messaging
-       Manifest V3 service worker
-       ├─ finds or opens a background ChatGPT tab
-       ├─ sends text in batches
-       └─ revalidates IDs and schema before applying results
-             ↕ Chrome runtime messaging
-       ChatGPT content script
-       ├─ operates the signed-in ChatGPT composer
-       ├─ requests strict JSON
-       ├─ waits for the complete response and retries once
-       └─ rejects missing, duplicate, unknown IDs, invalid types, and empty text
+Current-page content script
+  ├─ filters visible, primarily English text nodes in the viewport
+  ├─ creates stable ID mappings, retains originals, supports restore
+  └─ emits only {id, text}
+           ↕ Chrome runtime messaging
+Manifest V3 service worker
+  ├─ finds or creates the selected ChatGPT / M365 tab
+  ├─ batches up to 30 segments and about 6,000 characters
+  └─ revalidates the complete ID/schema before applying results
+           ↕ Chrome runtime messaging
+Provider-specific content script
+  ├─ operates the signed-in web composer and send control
+  ├─ requests strict JSON and retries once after failure
+  └─ rejects missing, duplicate, unknown IDs, bad types, and empty text
 ```
 
-A batch contains at most 30 segments and about 6,000 characters. Only `{id, text}` is sent to ChatGPT, never the full HTML document.
-
-## Collection and restore behavior
-
-The scanner skips:
-
-- off-viewport or CSS-hidden content
-- `script`, `style`, `svg`, `canvas`, and code blocks
-- form controls and editable regions
-- URLs, email addresses, and numeric-only content
-- text that is not primarily Latin-script
-
-Text node IDs derive from the page path, DOM position, and original text. Repeated scans reuse the existing mapping for the same node. Originals remain in content-script memory and are not written into the page HTML or uploaded. SPA rerenders may overwrite translations; run translation again after scrolling to newly visible content.
+The full HTML document is never sent. Collection skips off-viewport or hidden content, scripts, styles, SVG/canvas, code, form/editable controls, URLs, email addresses, numeric-only text, and text that is not primarily Latin-script. IDs derive from the page path, DOM position, and original text. Originals remain only in the target tab's content-script memory.
 
 ## Permissions, security, and privacy
 
-- `activeTab`: accesses the current page only after the user selects the extension.
-- `scripting`: injects the current-page translator and reconnects to an already-open ChatGPT tab when needed.
-- `https://chatgpt.com/*` and `https://chat.openai.com/*`: finds, opens, and operates the user's own ChatGPT tab.
-- The extension has no `<all_urls>`, localhost, Native Messaging, or local executable permission.
-- Webpage text is treated as untrusted data. The prompt says to ignore instructions inside the text and translate it as data. This reduces but cannot eliminate prompt-injection risk.
-- Translation text and ChatGPT responses pass through the user's ChatGPT account and may remain in that conversation history. The user's ChatGPT plan, data controls, policies, and usage limits apply.
-- Do not translate confidential, personal, or third-party material that you are not authorized to send to ChatGPT.
+- `activeTab`: accesses the current page after an explicit extension action.
+- `scripting`: injects the page translator and reconnects provider-tab scripts.
+- `storage`: stores only the selected provider.
+- `chatgpt.com` / `chat.openai.com`: operates the user's ChatGPT tab.
+- `m365.cloud.microsoft`: operates the user's Microsoft 365 Copilot tab.
+- There is no `<all_urls>`, localhost, Native Messaging, local executable, or API-key permission.
+- Web text is untrusted data. The prompt says to ignore embedded instructions and translate the text only. This reduces but cannot eliminate prompt-injection risk.
+- Text and responses pass through the selected account and may remain in chat history. Provider plans, data controls, organizational policies, and usage limits apply. Follow tenant governance and DLP rules when using a corporate M365 account.
+- Do not translate confidential, personal, or third-party material that you are not authorized to send to the selected service.
 
 ## Known limitations
 
-- This automates the ChatGPT web UI; it is not an official OpenAI API. Changes to ChatGPT's DOM, sign-in flow, verification, controls, or message structure may require an extension update.
-- First use still requires the user to sign in personally. The extension does not read or store passwords, cookies, or tokens.
-- The ChatGPT tab must remain open. The extension reuses it and prevents automatic discarding; if closed, a new tab is created next time.
-- Chrome may throttle a background tab, so speed depends on browser and ChatGPT state.
-- ChatGPT can return invalid JSON, omit items, reach a usage limit, or time out. The extension retries once and then stops the batch rather than applying unvalidated output.
-- Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and other attributes are not translated.
-- After dynamic rerenders, restore only applies to connected nodes retained by the same content script.
+- Both modes automate web UIs, not official APIs. Provider DOM, sign-in, controls, and response changes may require an extension update.
+- Sign-in, MFA, CAPTCHA, and organizational consent require user interaction. The extension never reads passwords, cookies, or tokens.
+- M365 requires Copilot Chat entitlement and an enabled tenant policy. A redirect to `/chat/blocked` stops translation and reports an entitlement/policy error.
+- Microsoft 365 rich-text editors can reject synthetic input in some organizational deployments. The extension fails before send in that case and intentionally does not fall back to a local bridge.
+- Chrome may throttle background tabs. Invalid JSON, usage limits, and timeouts are retried once; an invalid batch is never applied.
+- Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and other attributes are not translated. SPA rerenders can overwrite translations; restore applies only to nodes retained by the same content script.
 
 ## Development
 
-Node.js 22 or newer and npm are only needed to modify or package the source:
+Node.js 22 or newer and npm are required only to modify or package the source:
 
 ```powershell
 npm install
-npm run build
-npm run lint
-npm test
+npm run check
 npm run package
 ```
 
-`npm run check` runs build, lint, and test in order. The unpacked build is written to `dist/extension/`, and the release ZIP to `dist/release/translate-web-by-chatgpt-browser-v0.2.0.zip`.
+`npm run check` runs build, lint, and test in order. The unpacked build is in `dist/extension/`; the release ZIP is `dist/release/translate-web-by-browser-ai-v0.3.0.zip`.

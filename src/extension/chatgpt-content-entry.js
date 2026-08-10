@@ -123,11 +123,11 @@ async function translate(items) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'CHATGPT_STATUS') {
+  if (message?.type === 'PROVIDER_STATUS') {
     sendResponse(sessionStatus());
     return false;
   }
-  if (message?.type !== 'CHATGPT_TRANSLATE_BATCH') return false;
+  if (message?.type !== 'PROVIDER_TRANSLATE_BATCH') return false;
   translate(message.items ?? [])
     .then((translations) => sendResponse({ ok: true, translations }))
     .catch((error) => sendResponse({ ok: false, error: error.message }));

@@ -39,6 +39,15 @@ await Promise.all([
     legalComments: 'none',
   }),
   build({
+    entryPoints: [path.join(root, 'src', 'extension', 'm365-content-entry.js')],
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'chrome120',
+    outfile: path.join(output, 'm365-content.js'),
+    legalComments: 'none',
+  }),
+  build({
     entryPoints: [path.join(root, 'src', 'extension', 'popup.js')],
     bundle: true,
     format: 'iife',

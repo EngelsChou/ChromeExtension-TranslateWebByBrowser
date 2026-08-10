@@ -6,18 +6,20 @@ const manifest = JSON.parse(await readFile(new URL('../extension/manifest.json',
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const backgroundSource = await readFile(new URL('../src/extension/background.js', import.meta.url), 'utf8');
 
-test('ships a self-contained Manifest V3 ChatGPT tab extension', () => {
+test('ships a self-contained Manifest V3 provider-tab extension', () => {
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.version, packageJson.version);
   assert.deepEqual(manifest.host_permissions, [
     'https://chatgpt.com/*',
     'https://chat.openai.com/*',
+    'https://m365.cloud.microsoft/*',
   ]);
-  assert.deepEqual(manifest.permissions, ['activeTab', 'scripting']);
+  assert.deepEqual(manifest.permissions, ['activeTab', 'scripting', 'storage']);
   assert.equal(manifest.content_scripts[0].js[0], 'chatgpt-content.js');
+  assert.equal(manifest.content_scripts[1].js[0], 'm365-content.js');
 });
 
-test('normal use has no bridge, native host, executable, or provider dependency', () => {
+test('normal use has no bridge, native host, executable, or runtime dependency', () => {
   assert.equal(packageJson.dependencies, undefined);
   assert.equal(packageJson.scripts.bridge, undefined);
   assert.equal(packageJson.scripts['chatgpt:start'], undefined);

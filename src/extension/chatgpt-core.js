@@ -59,26 +59,26 @@ export function parseTranslationResponse(raw, expectedItems) {
       }
     } catch { /* continue past prose and malformed fences */ }
   }
-  if (!payload) throw new Error('ChatGPT 回覆不是有效的翻譯 JSON。');
+  if (!payload) throw new Error('服務回覆不是有效的翻譯 JSON。');
   return validateTranslations(payload, expectedItems);
 }
 
 export function validateTranslations(payload, expectedItems) {
-  if (!Array.isArray(payload)) throw new Error('ChatGPT 翻譯資料必須是陣列。');
+  if (!Array.isArray(payload)) throw new Error('翻譯資料必須是陣列。');
   const expectedIds = new Set(expectedItems.map((item) => item.id));
   const seen = new Set();
   const translations = payload.map((item) => {
     if (!item || typeof item.id !== 'string' || typeof item.text !== 'string') {
-      throw new Error('ChatGPT JSON 的每個翻譯都必須包含字串 id 與 text。');
+      throw new Error('JSON 的每個翻譯都必須包含字串 id 與 text。');
     }
-    if (!expectedIds.has(item.id)) throw new Error(`ChatGPT 回傳了未知 ID：${item.id}`);
-    if (seen.has(item.id)) throw new Error(`ChatGPT 回傳了重複 ID：${item.id}`);
-    if (!item.text.trim()) throw new Error(`ChatGPT 回傳空白翻譯：${item.id}`);
+    if (!expectedIds.has(item.id)) throw new Error(`服務回傳了未知 ID：${item.id}`);
+    if (seen.has(item.id)) throw new Error(`服務回傳了重複 ID：${item.id}`);
+    if (!item.text.trim()) throw new Error(`服務回傳空白翻譯：${item.id}`);
     seen.add(item.id);
     return { id: item.id, text: item.text };
   });
   const missing = [...expectedIds].filter((id) => !seen.has(id));
-  if (missing.length) throw new Error(`ChatGPT 缺少 ${missing.length} 個翻譯 ID：${missing.slice(0, 3).join(', ')}`);
-  if (translations.length !== expectedItems.length) throw new Error('ChatGPT 回傳的翻譯數量不符。');
+  if (missing.length) throw new Error(`服務缺少 ${missing.length} 個翻譯 ID：${missing.slice(0, 3).join(', ')}`);
+  if (translations.length !== expectedItems.length) throw new Error('服務回傳的翻譯數量不符。');
   return translations;
 }

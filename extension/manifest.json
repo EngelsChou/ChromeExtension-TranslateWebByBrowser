@@ -1,18 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "Translate Web by ChatGPT Browser",
-  "version": "0.2.0",
-  "description": "Translate visible English text nodes into Taiwan Traditional Chinese through a signed-in ChatGPT tab.",
-  "permissions": ["activeTab", "scripting"],
+  "name": "Translate Web by Browser AI",
+  "version": "0.3.0",
+  "description": "Translate visible English text nodes through a signed-in ChatGPT or Microsoft 365 Copilot tab.",
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
-    "https://chat.openai.com/*"
+    "https://chat.openai.com/*",
+    "https://m365.cloud.microsoft/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Translate Web by ChatGPT Browser",
+    "default_title": "Translate Web by Browser AI",
     "default_popup": "popup.html"
   },
   "content_scripts": [
@@ -22,6 +23,11 @@
         "https://chat.openai.com/*"
       ],
       "js": ["chatgpt-content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://m365.cloud.microsoft/*"],
+      "js": ["m365-content.js"],
       "run_at": "document_idle"
     }
   ],

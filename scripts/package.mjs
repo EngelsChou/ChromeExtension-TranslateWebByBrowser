@@ -7,7 +7,7 @@ const root = process.cwd();
 const extensionDir = path.join(root, 'dist', 'extension');
 const releaseDir = path.join(root, 'dist', 'release');
 const manifest = JSON.parse(await readFile(path.join(extensionDir, 'manifest.json'), 'utf8'));
-const zipPath = path.join(releaseDir, `translate-web-by-chatgpt-browser-v${manifest.version}.zip`);
+const zipPath = path.join(releaseDir, `translate-web-by-browser-ai-v${manifest.version}.zip`);
 await mkdir(releaseDir, { recursive: true });
 await rm(zipPath, { force: true });
 
