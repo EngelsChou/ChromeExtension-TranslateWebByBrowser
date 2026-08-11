@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.6.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.6.1.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -26,6 +26,8 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
 
 Translation progress remains visible at the bottom-right of the original webpage after the popup closes. Every paragraph intersecting the current viewport is placed in the first priority batch. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON, so the visible page does not wait for the entire response or offscreen content.
+
+ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
 
 ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
 
@@ -97,4 +99,4 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.6.0.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.6.1.zip`.

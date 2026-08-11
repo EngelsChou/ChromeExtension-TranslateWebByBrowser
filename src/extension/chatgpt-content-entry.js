@@ -86,10 +86,6 @@ async function submitAndWait(prompt, items, requestId) {
   const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
   const beforeText = assistantText(beforeNodes.at(-1));
   setComposerValue(composer, prompt);
-  const written = composer.value ?? composer.innerText ?? composer.textContent ?? '';
-  if (!written.includes('INPUT_JSON=')) {
-    throw new Error('ChatGPT 輸入框未正確接收翻譯內容，尚未送出。');
-  }
   (await waitForSendButton(composer)).click();
 
   const deadline = Date.now() + 180_000;

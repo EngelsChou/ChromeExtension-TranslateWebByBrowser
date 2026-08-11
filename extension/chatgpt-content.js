@@ -186,10 +186,6 @@
       const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
       const beforeText = assistantText(beforeNodes.at(-1));
       setComposerValue(composer, prompt);
-      const written = composer.value ?? composer.innerText ?? composer.textContent ?? "";
-      if (!written.includes("INPUT_JSON=")) {
-        throw new Error("ChatGPT \u8F38\u5165\u6846\u672A\u6B63\u78BA\u63A5\u6536\u7FFB\u8B6F\u5167\u5BB9\uFF0C\u5C1A\u672A\u9001\u51FA\u3002");
-      }
       (await waitForSendButton(composer)).click();
       const deadline = Date.now() + 18e4;
       const emittedIds = /* @__PURE__ */ new Set();

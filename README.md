@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.6.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.6.1.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -93,13 +93,13 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.6.0.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.6.1.zip`。
 
 ## 翻譯速度與進度
 
 - popup 關閉後，原網頁右下角仍會顯示目前階段、已經過秒數、批次與已套用段落數。
 - 目前視窗內相交的每個標題、段落與清單項目都會進入第一個優先批次；畫面外內容稍後才處理。
 - 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即套用，不等整批或整頁完成。
-- ChatGPT 最新 composer 已加入 paste/input 狀態同步與送出前驗證；若傳送按鈕沒有啟用，會快速失敗並明確顯示「尚未送出」，不再空等 180 秒。
+- ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
 - 實際等待時間仍取決於 provider、帳號負載、網路與 Chrome 背景分頁節流；網頁上的計時可用來區分「provider 尚在回覆」與 Extension 沒有運作。
 - 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。

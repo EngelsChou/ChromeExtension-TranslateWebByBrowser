@@ -87,6 +87,7 @@ test('both providers stream validated paragraph objects back to the source page'
 test('ChatGPT composer integration updates React state and fails fast before an unsent retry', () => {
   assert.match(chatgptSource, /ClipboardEvent\('paste'/u);
   assert.match(chatgptSource, /new InputEvent\('input'/u);
-  assert.match(chatgptSource, /尚未送出/u);
+  assert.doesNotMatch(chatgptSource, /composer\.value \?\? composer\.innerText/u);
+  assert.match(chatgptSource, /waitForSendButton\(composer\)\)\.click/u);
   assert.match(chatgptSource, /傳送按鈕\|尚未送出\|輸入框/u);
 });
