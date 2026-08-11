@@ -6,9 +6,13 @@ A self-contained Manifest V3 Chrome Extension. It captures visible English text 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.3.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.3.1.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
-3. Select **Load unpacked** and choose the extracted folder containing `manifest.json`.
+3. Select **Load unpacked**:
+   - For the release ZIP, choose the extracted folder that directly contains `manifest.json`.
+   - For GitHub's **Source code ZIP**, choose its `extension/` folder.
+
+The `extension/` folder includes every compiled JavaScript file referenced by the manifest; no build is required. If Chrome reports a missing `chatgpt-content.js`, the source is v0.3.0 or older—download v0.3.1 or later.
 
 After installation, use only the extension icon; no command needs to be run for each use. npm is only for developers modifying and repackaging the source.
 
@@ -74,4 +78,4 @@ npm run check
 npm run package
 ```
 
-`npm run check` runs build, lint, and test in order. The unpacked build is in `dist/extension/`; the release ZIP is `dist/release/translate-web-by-browser-ai-v0.3.0.zip`.
+`npm run check` runs build, lint, and test in order. The build updates the directly loadable, version-controlled `extension/` folder and copies release staging files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.3.1.zip`.

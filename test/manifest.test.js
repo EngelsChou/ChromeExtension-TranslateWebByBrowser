@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 
 const manifest = JSON.parse(await readFile(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -25,4 +25,16 @@ test('normal use has no bridge, native host, executable, or runtime dependency',
   assert.equal(packageJson.scripts['chatgpt:start'], undefined);
   assert.doesNotMatch(JSON.stringify(manifest), /localhost|127\.0\.0\.1|nativeMessaging/iu);
   assert.doesNotMatch(backgroundSource, /localhost|127\.0\.0\.1|fetch\s*\(/iu);
+});
+
+test('the repository extension folder contains every manifest entry point', async () => {
+  const files = [
+    manifest.background.service_worker,
+    manifest.action.default_popup,
+    'popup.css',
+    'popup.js',
+    'content.js',
+    ...manifest.content_scripts.flatMap(({ js }) => js),
+  ];
+  await Promise.all([...new Set(files)].map((file) => access(new URL(`../extension/${file}`, import.meta.url))));
 });

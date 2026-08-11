@@ -3,7 +3,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', '.chatgpt-profile/**'],
+    ignores: ['dist/**', 'node_modules/**', '.chatgpt-profile/**', 'extension/*.js'],
   },
   js.configs.recommended,
   {

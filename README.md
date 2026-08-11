@@ -6,9 +6,13 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.3.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.3.1.zip`。
 2. 開啟 `chrome://extensions` 並啟用「開發人員模式」。
-3. 選擇「載入未封裝項目」，指定解壓縮後含有 `manifest.json` 的資料夾。
+3. 選擇「載入未封裝項目」：
+   - 使用發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
+   - 使用 GitHub 的 **Source code ZIP**：選擇其中的 `extension/` 資料夾。
+
+`extension/` 已包含 manifest 引用的所有編譯後 JavaScript；不需要先執行 build。若 Chrome 顯示缺少 `chatgpt-content.js`，代表下載的是 v0.3.0 或更舊的原始碼，請改用 v0.3.1 以上。
 
 完成後只需按 Extension 圖示，不必每次執行指令。npm 僅供修改原始碼與重新打包的開發者使用。
 
@@ -74,4 +78,4 @@ npm run check
 npm run package
 ```
 
-`npm run check` 依序執行 build、lint、test。未封裝產物在 `dist/extension/`，發布 ZIP 在 `dist/release/translate-web-by-browser-ai-v0.3.0.zip`。
+`npm run check` 依序執行 build、lint、test。build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布暫存內容至 `dist/extension/`；發布 ZIP 在 `dist/release/translate-web-by-browser-ai-v0.3.1.zip`。
