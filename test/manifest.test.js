@@ -5,6 +5,7 @@ import { access, readFile } from 'node:fs/promises';
 const manifest = JSON.parse(await readFile(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const backgroundSource = await readFile(new URL('../src/extension/background.js', import.meta.url), 'utf8');
+const m365Source = await readFile(new URL('../src/extension/m365-content-entry.js', import.meta.url), 'utf8');
 
 test('ships a self-contained Manifest V3 provider-tab extension', () => {
   assert.equal(manifest.manifest_version, 3);
@@ -46,4 +47,16 @@ test('opening the popup cannot create or activate a provider tab', () => {
   );
   assert.match(statusHandler, /findExistingProviderTab/u);
   assert.doesNotMatch(statusHandler, /findOrCreateProviderTab|tabs\.create|tabs\.update|windows\.update/u);
+});
+
+test('translation uses paragraph blocks and verifies every applied result', () => {
+  assert.match(backgroundSource, /COLLECT_TRANSLATION_BLOCKS/u);
+  assert.match(backgroundSource, /applyResult\.applied !== translations\.length/u);
+  assert.doesNotMatch(backgroundSource, /COLLECT_TEXT_NODES/u);
+});
+
+test('M365 waits for schema-valid candidates and response completion markers', () => {
+  assert.match(m365Source, /parseFirstValidTranslationResponse/u);
+  assert.match(m365Source, /copyActionCount/u);
+  assert.match(m365Source, /previousCandidates/u);
 });

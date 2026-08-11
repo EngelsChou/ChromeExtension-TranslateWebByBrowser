@@ -24,6 +24,8 @@ header p { margin: 2px 0 0; color: #6c7b76; font-size: 12px; }
 
 .provider-field { display: grid; gap: 6px; margin: -2px 0 14px; }
 .provider-field span { color: #53645e; font-size: 12px; font-weight: 700; }
+.option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.option-grid .provider-field { margin-bottom: 14px; }
 select {
   width: 100%; min-height: 40px; padding: 0 11px; border: 1px solid #c9c6bd;
   border-radius: 10px; color: #18352f; background: #fffdf8; font: inherit;

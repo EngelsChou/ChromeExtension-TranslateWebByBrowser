@@ -30,6 +30,11 @@
       if (!expectedIds.has(item.id)) throw new Error(`\u670D\u52D9\u56DE\u50B3\u4E86\u672A\u77E5 ID\uFF1A${item.id}`);
       if (seen.has(item.id)) throw new Error(`\u670D\u52D9\u56DE\u50B3\u4E86\u91CD\u8907 ID\uFF1A${item.id}`);
       if (!item.text.trim()) throw new Error(`\u670D\u52D9\u56DE\u50B3\u7A7A\u767D\u7FFB\u8B6F\uFF1A${item.id}`);
+      const source = expectedItems.find((expected) => expected.id === item.id)?.text ?? "";
+      const sourceWords = source.match(/[A-Za-z][A-Za-z'-]*/gu) ?? [];
+      if (sourceWords.length >= 4 && source.length >= 24 && !/[\p{Script=Han}]/u.test(item.text)) {
+        throw new Error(`\u670D\u52D9\u56DE\u50B3\u7684\u5167\u5BB9\u4E0D\u50CF\u53F0\u7063\u7E41\u9AD4\u4E2D\u6587\uFF1A${item.id}`);
+      }
       seen.add(item.id);
       return { id: item.id, text: item.text };
     });
@@ -159,16 +164,23 @@
     await chrome.windows.update(tab.windowId, { focused: true });
     return { provider: provider.id, providerName: provider.name, tabId: tab.id };
   }
-  function announce(detail) {
-    chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", ...detail }).catch(() => {
+  function updateJob(detail) {
+    const job = { updatedAt: Date.now(), ...detail };
+    chrome.storage.session.set({ translationJob: job }).catch(() => {
     });
+    chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", ...job }).catch(() => {
+    });
+    return job;
   }
-  async function translatePage(providerId) {
+  async function translatePage(providerId, { scope = "main", displayMode = "bilingual" } = {}) {
     const provider = getProvider(providerId);
     const targetTab = await activeTargetTab();
     await ensureTargetContentScript(targetTab.id);
-    const { items } = await chrome.tabs.sendMessage(targetTab.id, { type: "COLLECT_TEXT_NODES" });
-    if (!items?.length) return { translated: 0, total: 0, message: "\u76EE\u524D\u756B\u9762\u6C92\u6709\u7B26\u5408\u689D\u4EF6\u7684\u53EF\u898B\u82F1\u6587\u6587\u5B57\u3002" };
+    const { items } = await chrome.tabs.sendMessage(targetTab.id, {
+      type: "COLLECT_TRANSLATION_BLOCKS",
+      scope
+    });
+    if (!items?.length) return { translated: 0, total: 0, batches: 0, message: "\u627E\u4E0D\u5230\u7B26\u5408\u689D\u4EF6\u7684\u82F1\u6587\u4E3B\u8981\u5167\u5BB9\u3002" };
     const { tab: providerTab, status } = await findOrCreateProviderTab(provider);
     if (!status.ready) {
       await chrome.tabs.update(providerTab.id, { active: true });
@@ -177,7 +189,16 @@
     }
     const batches = createBatches(items);
     let translated = 0;
-    announce({ provider: provider.id, completed: 0, total: batches.length, translated, nodes: items.length });
+    updateJob({
+      state: "running",
+      provider: provider.id,
+      scope,
+      displayMode,
+      completed: 0,
+      total: batches.length,
+      translated,
+      blocks: items.length
+    });
     for (let index = 0; index < batches.length; index += 1) {
       const batch = batches[index];
       const result = await chrome.tabs.sendMessage(providerTab.id, {
@@ -188,12 +209,25 @@
       const translations = validateTranslations(result.translations, batch);
       const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
         type: "APPLY_TRANSLATIONS",
-        translations
+        translations,
+        displayMode
       });
+      if (applyResult.applied !== translations.length) {
+        throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${translations.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002\u8ACB\u6062\u5FA9\u5F8C\u91CD\u8A66\u3002`);
+      }
       translated += applyResult.applied;
-      announce({ provider: provider.id, completed: index + 1, total: batches.length, translated, nodes: items.length });
+      updateJob({
+        state: "running",
+        provider: provider.id,
+        scope,
+        displayMode,
+        completed: index + 1,
+        total: batches.length,
+        translated,
+        blocks: items.length
+      });
     }
-    return { translated, total: items.length };
+    return { translated, total: items.length, batches: batches.length };
   }
   async function restorePage(providerId) {
     getProvider(providerId);
@@ -201,14 +235,39 @@
     await ensureTargetContentScript(tab.id);
     return chrome.tabs.sendMessage(tab.id, { type: "RESTORE_TEXT_NODES" });
   }
-  function enqueueTranslation(providerId) {
-    const task = translationQueue.then(() => translatePage(providerId), () => translatePage(providerId));
+  function enqueueTranslation(providerId, options) {
+    const execute = async () => {
+      try {
+        const result = await translatePage(providerId, options);
+        updateJob({
+          state: "complete",
+          provider: providerId,
+          ...options,
+          completed: result.batches,
+          total: result.batches,
+          translated: result.translated,
+          blocks: result.total
+        });
+        return result;
+      } catch (error) {
+        updateJob({ state: "error", provider: providerId, ...options, error: error.message });
+        throw error;
+      }
+    };
+    const task = translationQueue.then(execute, execute);
     translationQueue = task.catch(() => {
     });
     return task;
   }
+  async function translationJob() {
+    const stored = await chrome.storage.session.get("translationJob");
+    return stored.translationJob ?? null;
+  }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    const task = message?.type === "GET_PROVIDER_STATUS" ? providerStatus(message.provider) : message?.type === "OPEN_PROVIDER" ? openProvider(message.provider) : message?.type === "TRANSLATE_PAGE" ? enqueueTranslation(message.provider) : message?.type === "RESTORE_PAGE" ? restorePage(message.provider) : null;
+    const task = message?.type === "GET_PROVIDER_STATUS" ? providerStatus(message.provider) : message?.type === "OPEN_PROVIDER" ? openProvider(message.provider) : message?.type === "TRANSLATE_PAGE" ? enqueueTranslation(message.provider, {
+      scope: message.scope === "page" ? "page" : "main",
+      displayMode: message.displayMode === "replace" ? "replace" : "bilingual"
+    }) : message?.type === "RESTORE_PAGE" ? restorePage(message.provider) : message?.type === "GET_TRANSLATION_JOB" ? translationJob() : null;
     if (!task) return false;
     task.then((result) => sendResponse({ ok: true, ...result })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

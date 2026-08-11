@@ -107,16 +107,22 @@ async function openProvider(providerId) {
   return { provider: provider.id, providerName: provider.name, tabId: tab.id };
 }
 
-function announce(detail) {
-  chrome.runtime.sendMessage({ type: 'TRANSLATION_PROGRESS', ...detail }).catch(() => {});
+function updateJob(detail) {
+  const job = { updatedAt: Date.now(), ...detail };
+  chrome.storage.session.set({ translationJob: job }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'TRANSLATION_PROGRESS', ...job }).catch(() => {});
+  return job;
 }
 
-async function translatePage(providerId) {
+async function translatePage(providerId, { scope = 'main', displayMode = 'bilingual' } = {}) {
   const provider = getProvider(providerId);
   const targetTab = await activeTargetTab();
   await ensureTargetContentScript(targetTab.id);
-  const { items } = await chrome.tabs.sendMessage(targetTab.id, { type: 'COLLECT_TEXT_NODES' });
-  if (!items?.length) return { translated: 0, total: 0, message: '目前畫面沒有符合條件的可見英文文字。' };
+  const { items } = await chrome.tabs.sendMessage(targetTab.id, {
+    type: 'COLLECT_TRANSLATION_BLOCKS',
+    scope,
+  });
+  if (!items?.length) return { translated: 0, total: 0, batches: 0, message: '找不到符合條件的英文主要內容。' };
 
   const { tab: providerTab, status } = await findOrCreateProviderTab(provider);
   if (!status.ready) {
@@ -127,7 +133,10 @@ async function translatePage(providerId) {
 
   const batches = createBatches(items);
   let translated = 0;
-  announce({ provider: provider.id, completed: 0, total: batches.length, translated, nodes: items.length });
+  updateJob({
+    state: 'running', provider: provider.id, scope, displayMode,
+    completed: 0, total: batches.length, translated, blocks: items.length,
+  });
 
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index];
@@ -140,12 +149,19 @@ async function translatePage(providerId) {
     const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
       type: 'APPLY_TRANSLATIONS',
       translations,
+      displayMode,
     });
+    if (applyResult.applied !== translations.length) {
+      throw new Error(`原網頁在翻譯期間已重繪，${translations.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
+    }
     translated += applyResult.applied;
-    announce({ provider: provider.id, completed: index + 1, total: batches.length, translated, nodes: items.length });
+    updateJob({
+      state: 'running', provider: provider.id, scope, displayMode,
+      completed: index + 1, total: batches.length, translated, blocks: items.length,
+    });
   }
 
-  return { translated, total: items.length };
+  return { translated, total: items.length, batches: batches.length };
 }
 
 async function restorePage(providerId) {
@@ -155,10 +171,29 @@ async function restorePage(providerId) {
   return chrome.tabs.sendMessage(tab.id, { type: 'RESTORE_TEXT_NODES' });
 }
 
-function enqueueTranslation(providerId) {
-  const task = translationQueue.then(() => translatePage(providerId), () => translatePage(providerId));
+function enqueueTranslation(providerId, options) {
+  const execute = async () => {
+    try {
+      const result = await translatePage(providerId, options);
+      updateJob({
+        state: 'complete', provider: providerId, ...options,
+        completed: result.batches, total: result.batches,
+        translated: result.translated, blocks: result.total,
+      });
+      return result;
+    } catch (error) {
+      updateJob({ state: 'error', provider: providerId, ...options, error: error.message });
+      throw error;
+    }
+  };
+  const task = translationQueue.then(execute, execute);
   translationQueue = task.catch(() => {});
   return task;
+}
+
+async function translationJob() {
+  const stored = await chrome.storage.session.get('translationJob');
+  return stored.translationJob ?? null;
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -167,9 +202,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     : message?.type === 'OPEN_PROVIDER'
       ? openProvider(message.provider)
       : message?.type === 'TRANSLATE_PAGE'
-        ? enqueueTranslation(message.provider)
+        ? enqueueTranslation(message.provider, {
+          scope: message.scope === 'page' ? 'page' : 'main',
+          displayMode: message.displayMode === 'replace' ? 'replace' : 'bilingual',
+        })
         : message?.type === 'RESTORE_PAGE'
           ? restorePage(message.provider)
+          : message?.type === 'GET_TRANSLATION_JOB'
+            ? translationJob()
           : null;
   if (!task) return false;
   task.then((result) => sendResponse({ ok: true, ...result }))

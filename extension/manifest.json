@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Translate Web by Browser AI",
-  "version": "0.3.2",
-  "description": "Translate visible English text nodes through a signed-in ChatGPT or Microsoft 365 Copilot tab.",
+  "version": "0.4.0",
+  "description": "Translate English webpage blocks through a signed-in ChatGPT or Microsoft 365 Copilot tab.",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://chatgpt.com/*",

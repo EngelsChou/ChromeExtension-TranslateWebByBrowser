@@ -1,73 +1,85 @@
 # Translate Web by Browser AI
 
-可直接載入 Chrome 的 Manifest V3 Extension。它擷取目前畫面中可見的英文 Text Nodes，讓使用者選擇透過已登入的 **ChatGPT** 或 **Microsoft 365 Copilot** 網頁翻成台灣繁體中文，再原地替換文字。一般使用不需要 npm、Node.js、指令、localhost bridge、Native Messaging 或 AI API。
+可直接載入 Chrome 的 Manifest V3 Extension。它辨識網頁主要內容，將英文段落透過使用者已登入的 **ChatGPT** 或 **Microsoft 365 Copilot** 網頁翻成台灣繁體中文，並以雙語對照或只顯示翻譯的方式原地呈現。一般使用不需要 npm、Node.js、指令、localhost bridge、Native Messaging 或 AI API。
 
 [English](README.en.md)
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.3.2.zip`。
-2. 開啟 `chrome://extensions` 並啟用「開發人員模式」。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.4.0.zip`。
+2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
-   - 使用發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
-   - 使用 GitHub 的 **Source code ZIP**：選擇其中的 `extension/` 資料夾。
+   - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
+   - GitHub **Source code ZIP**：選擇其中的 `extension/` 資料夾。
 
-`extension/` 已包含 manifest 引用的所有編譯後 JavaScript；不需要先執行 build。若 Chrome 顯示缺少 `chatgpt-content.js`，代表下載的是 v0.3.0 或更舊的原始碼，請改用 v0.3.1 以上。
-
-完成後只需按 Extension 圖示，不必每次執行指令。npm 僅供修改原始碼與重新打包的開發者使用。
+`extension/` 已包含所有編譯後 JavaScript。完成後只需按 Extension 圖示，不必執行 npm 或終端指令。
 
 ## 使用方式
 
 1. 在要翻譯的網頁按 Extension 圖示。
-2. 在「翻譯服務」選擇 `ChatGPT` 或 `Microsoft 365 Copilot`；選擇會保存在 Chrome 本機。單純開啟 popup 或切換選項不會建立、開啟或切換到任何服務分頁。
-3. 第一次使用時，確認 provider 後再按登入按鈕；只有此時才會開啟所選服務，讓使用者親自完成登入、MFA 或組織驗證。
-4. 回到原網頁，再次開啟 popup 並按「翻譯目前頁面」。
-5. 按「恢復原文」可還原目前頁面生命週期內已翻譯的 Text Nodes。
+2. 選擇 `ChatGPT` 或 `Microsoft 365 Copilot`。開啟 popup 或切換選項不會自動開啟任何 provider。
+3. 選擇翻譯範圍：
+   - **主要內容（建議）**：辨識 `main`、`article`、`[role=main]`，排除導覽列、頁尾與側欄。
+   - **整個頁面**：翻譯所有可辨識的已渲染段落，包括導覽區域。
+4. 選擇 **雙語對照** 或 **只顯示翻譯**。
+5. 第一次使用時，確認 provider 後按登入按鈕，親自完成登入、MFA 或組織驗證。
+6. 回到原網頁，按「翻譯目前頁面」。按「恢復原文」可完整移除翻譯並還原原始節點。
 
-ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsoft/chat/`。狀態檢查只讀取既有分頁；按登入或開始翻譯後，Extension 才會重用或建立所選服務分頁。若輸入框已有草稿，會另外建立空白對話，避免覆寫使用者文字。
+ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsoft/chat/`。若 provider 輸入框已有草稿，Extension 會建立新對話，避免覆寫使用者內容。
 
-## 架構
+## 段落級架構
 
 ```text
 目前網頁 content script
-  ├─ 篩選 viewport 內可見、以英文為主的 Text Nodes
-  ├─ 建立穩定 ID mapping，保存原文並支援恢復
-  └─ 只輸出 {id, text}
+  ├─ 尋找主要內容或整頁範圍
+  ├─ 擷取 h1-h6 / p / li / td / blockquote 等已渲染段落
+  ├─ 包含 viewport 外的文章內容，不只翻譯目前畫面
+  ├─ 產生穩定 block ID，保存原始 DOM children
+  └─ 只輸出 {id, text, context:{type, heading}}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ popup 狀態檢查只查詢既有分頁，不自動開啟 provider
-  ├─ 使用者按登入/翻譯後才尋找或建立所選服務分頁
   ├─ 每批最多 30 段、約 6,000 字元
-  └─ 套用前再次驗證完整 ID/schema
+  ├─ 保存進度與最後錯誤，popup 關閉後仍可查詢
+  ├─ 再次驗證完整 ID/schema 與實際套用數量
+  └─ 網頁重繪造成 mapping 失效時安全停止
            ↕ Chrome runtime messaging
-服務專用 content script
-  ├─ 操作已登入的網頁輸入框與傳送控制項
-  ├─ 要求只回傳嚴格 JSON，失敗重試一次
-  └─ 拒絕缺少、重複、未知 ID、錯誤型別與空翻譯
+Provider content script
+  ├─ 操作已登入的 ChatGPT / M365 composer
+  ├─ 依 ChatGPT／M365 調整提示語氣，並嚴格要求單一 JSON object
+  ├─ 逐一驗證 JSON 候選，不會誤用 prompt 範例或建議按鈕
+  └─ M365 參考 ask-bridge：使用 Stop、Copy action、新回覆與穩定度判斷完成
 ```
 
-Extension 不傳送整頁 HTML。掃描會略過 viewport 外或隱藏內容、`script`、`style`、`svg`、`canvas`、程式碼、表單控制項、可編輯區域、URL、email、純數字及非拉丁字母為主的文字。Text Node ID 由頁面路徑、DOM 位置與原文產生；原文只保存在該分頁 content script 記憶體中。
+雙語模式會保留段落原有連結、格式與事件節點，再插入獨立的 `lang="zh-Hant-TW"` 翻譯元素；只顯示翻譯模式則隱藏原始 wrapper。恢復時會把原始 children 移回原位，不使用重新載入頁面。
 
-## 權限、安全與隱私
+## 傳送內容與隱私
 
-- `activeTab`：只在使用者操作 Extension 後存取目前頁面。
-- `scripting`：注入目前頁面的翻譯程式，並在服務分頁補注入連線程式。
-- `storage`：只保存所選 provider。
+Extension **不傳送整頁 HTML 或 DOM 結構**。每個段落只傳送：
+
+- 穩定隨機式 ID
+- 純文字
+- 最小語意提示：元素類型與最近標題
+
+它不傳送 class、CSS、事件、表單值、Cookie、token 或登入資料。掃描會略過隱藏內容、`script`、`style`、`svg`、`canvas`、程式碼、表單/可編輯區域、`translate=no`、URL、email、純數字與非拉丁字母為主的文字。
+
+權限用途：
+
+- `activeTab`：使用者操作後存取目前頁面。
+- `scripting`：注入頁面 translator 與 provider 連線程式。
+- `storage`：保存 provider、翻譯範圍、顯示方式及工作階段進度。
 - `chatgpt.com` / `chat.openai.com`：操作使用者自己的 ChatGPT 分頁。
 - `m365.cloud.microsoft`：操作使用者自己的 Microsoft 365 Copilot 分頁。
-- 不包含 `<all_urls>`、localhost、Native Messaging、本機 executable 或 API key。
-- 網頁文字一律視為不可信資料；prompt 要求忽略文字內指令，只做翻譯。這可降低但無法完全消除 prompt injection 風險。
-- 文字與回覆會經過所選服務帳戶，可能保留在對話紀錄中。其方案、資料控制、組織政策與用量限制均適用。使用公司 M365 帳戶時，請遵守租用戶資料治理與 DLP 政策。
-- 請勿翻譯沒有權限傳送到所選服務的機密、個資或第三方內容。
+
+網頁文字一律視為不可信資料；prompt 明確要求忽略文字中的指令。文字與回覆仍會經過所選服務並可能保留在對話紀錄中，請遵守帳戶、租用戶、DLP 與資料治理政策。
 
 ## 已知限制
 
-- 兩種模式都是網頁 UI 自動化，不是官方 API。服務 DOM、登入流程、按鈕或訊息結構改版時可能需要更新 Extension。
-- 首次登入、MFA、CAPTCHA 與組織同意必須由使用者處理；Extension 不讀取密碼、Cookie 或 token。
-- M365 需要帳戶/租用戶可使用 Copilot Chat；若導向 `/chat/blocked`，Extension 會停止並顯示授權/政策錯誤。
-- Microsoft 365 的 rich-text editor 對合成輸入事件較敏感；若組織部署的 UI 不接受 Extension 寫入，會在送出前失敗，不會刻意改用本機 bridge。
-- 背景分頁可能被 Chrome 節流。服務也可能回傳錯誤 JSON、達到用量限制或逾時；重試一次仍失敗就停止該批，不套用未驗證結果。
-- 不翻譯 shadow DOM、cross-origin iframe、圖片文字、placeholder、`aria-label` 或其他 attribute。SPA 重繪可能覆蓋翻譯；恢復只適用於仍由同一 content script 保存的節點。
+- 兩種模式都是網頁 UI 自動化，不是官方 API；provider DOM 改版時可能需要更新。
+- 登入、MFA、CAPTCHA 與組織同意必須由使用者處理；Extension 不讀取密碼、Cookie 或 token。
+- M365 必須具有 Copilot Chat 權限；導向 `/chat/blocked` 時會停止並顯示授權/政策錯誤。
+- 不翻譯 shadow DOM、cross-origin iframe、圖片文字、placeholder、`aria-label` 或 canvas 內容。
+- SPA 若在翻譯期間替換段落，Extension 會拒絕套用失去 mapping 的批次；可恢復後重試。
+- 超長單一段落、provider 用量限制、背景分頁節流或無效 JSON 可能造成逾時；失敗批次不會套用。
 
 ## 開發
 
@@ -79,4 +91,4 @@ npm run check
 npm run package
 ```
 
-`npm run check` 依序執行 build、lint、test。build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布暫存內容至 `dist/extension/`；發布 ZIP 在 `dist/release/translate-web-by-browser-ai-v0.3.2.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.4.0.zip`。

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTranslationResponse, validateTranslations } from '../src/extension/chatgpt-core.js';
+import {
+  parseFirstValidTranslationResponse,
+  parseTranslationResponse,
+  validateTranslations,
+} from '../src/extension/chatgpt-core.js';
 
 const expected = [
   { id: 'tn-one', text: 'Hello' },
@@ -30,4 +34,27 @@ test('revalidates structured translations before applying them', () => {
     { id: 'tn-two', text: '世界' },
   ], expected).map(({ id }) => id), ['tn-one', 'tn-two']);
   assert.throws(() => validateTranslations([{ id: 'tn-one', text: '哈囉' }], expected), /缺少/u);
+});
+
+test('skips prompt schema examples and selects the later ID-complete response', () => {
+  const noisy = [
+    'Schema: {"translations":[{"id":"same-id","text":"translated text"}]}',
+    'INPUT_JSON={"items":[{"id":"tn-one","text":"Hello"},{"id":"tn-two","text":"World"}]}',
+    'Answer: {"translations":[{"id":"tn-one","text":"哈囉"},{"id":"tn-two","text":"世界"}]}',
+  ].join('\n');
+  assert.equal(parseTranslationResponse(noisy, expected)[1].text, '世界');
+});
+
+test('selects a valid M365 answer while ignoring follow-up suggestions', () => {
+  const result = parseFirstValidTranslationResponse([
+    '新增其他語言翻譯',
+    '{"translations":[{"id":"tn-one","text":"哈囉"},{"id":"tn-two","text":"世界"}]}',
+  ], expected);
+  assert.equal(result.length, 2);
+});
+
+test('rejects a long English echo as an untranslated response', () => {
+  const source = [{ id: 'tn-long', text: 'This paragraph contains enough English words to require a real translation.' }];
+  const echo = '{"translations":[{"id":"tn-long","text":"This paragraph contains enough English words to require a real translation."}]}';
+  assert.throws(() => parseTranslationResponse(echo, source), /不像台灣繁體中文/u);
 });

@@ -1,8 +1,8 @@
 {
   "name": "translate-web-by-browser-ai",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
-  "description": "Self-contained Manifest V3 extension that translates visible English text nodes through ChatGPT or Microsoft 365 Copilot web tabs.",
+  "description": "Self-contained Manifest V3 extension that translates English webpage blocks through ChatGPT or Microsoft 365 Copilot web tabs.",
   "type": "module",
   "engines": {
     "node": ">=22"

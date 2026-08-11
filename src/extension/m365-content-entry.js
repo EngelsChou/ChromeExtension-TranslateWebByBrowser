@@ -1,4 +1,4 @@
-import { buildTranslationPrompt, parseTranslationResponse } from './chatgpt-core.js';
+import { buildM365TranslationPrompt, parseFirstValidTranslationResponse } from './chatgpt-core.js';
 
 const COMPOSER_SELECTORS = [
   'textarea#userInput',
@@ -150,30 +150,51 @@ if (!globalThis.__translateWebM365ContentReady) {
     throw new Error('Microsoft 365 Copilot 傳送按鈕沒有啟用。');
   }
 
-  function assistantText(node) {
-    const content = node?.querySelector(RESPONSE_CONTENT_SELECTOR) ?? node;
-    return content?.innerText?.trim() ?? '';
+  function responseCandidateTexts() {
+    const nodes = [
+      ...document.querySelectorAll(RESPONSE_CONTENT_SELECTOR),
+      ...document.querySelectorAll(ASSISTANT_SELECTOR),
+    ];
+    const texts = nodes
+      .map((node) => node.innerText?.trim() ?? '')
+      .filter((text) => text.includes('"translations"'))
+      .reverse();
+    return [...new Set(texts)];
   }
 
-  function responseState() {
-    const nodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
-    const text = assistantText(nodes.at(-1));
+  function copyActionCount() {
+    return [...document.querySelectorAll('button, [role="button"]')]
+      .filter((node) => {
+        const label = labelOf(node);
+        return /(?:copy|複製|复制|コピー|복사)/iu.test(label)
+          && !/(?:code|程式碼|代码|table|表格)/iu.test(label)
+          && !node.closest('pre, code, [class*="code"], [data-testid*="code"]');
+      }).length;
+  }
+
+  function responseState(items, excludedCandidates = new Set()) {
     const generating = [...document.querySelectorAll('button, [role="button"]')]
       .some((node) => isClickable(node) && /(?:stop|停止|中止|取消生成|取消產生|取消回覆|取消回应)/iu.test(labelOf(node)));
-    return { count: nodes.length, text, generating };
+    const candidates = responseCandidateTexts().filter((text) => !excludedCandidates.has(text));
+    let translations = null;
+    try {
+      translations = parseFirstValidTranslationResponse(candidates, items);
+    } catch { /* a complete, schema-valid response has not appeared yet */ }
+    return { candidates, translations, generating, copyActions: copyActionCount() };
   }
 
-  async function submitAndWait(prompt) {
+  async function submitAndWait(prompt, items) {
     const composer = findComposer();
     if (!composer) throw new Error('找不到 Microsoft 365 Copilot 輸入框，請確認已登入 Copilot Chat。');
-    const before = responseState();
+    const before = responseState(items);
+    const previousCandidates = new Set(before.candidates);
     setComposerValue(composer, prompt);
     const written = 'value' in composer ? composer.value : composer.innerText || composer.textContent;
     if (!written?.trim()) throw new Error('Microsoft 365 Copilot 輸入框仍是空白，未送出文字。');
     (await waitForSendButton(composer)).click();
 
     const deadline = Date.now() + 180_000;
-    let stableText = '';
+    let stableTranslation = '';
     let stableCount = 0;
     let generationSeen = false;
     while (Date.now() < deadline) {
@@ -181,16 +202,17 @@ if (!globalThis.__translateWebM365ContentReady) {
       if (location.pathname.toLowerCase().startsWith('/chat/blocked')) {
         throw new Error('Microsoft 365 Copilot Chat 已導向封鎖頁面；請確認帳戶授權與租用戶原則。');
       }
-      const current = responseState();
+      const current = responseState(items, previousCandidates);
       generationSeen ||= current.generating;
-      const isNew = current.count > before.count || (current.text && current.text !== before.text);
-      if (!isNew || !current.text) continue;
-      if (current.text === stableText) stableCount += 1;
+      if (!current.translations) continue;
+      const signature = JSON.stringify(current.translations);
+      if (signature === stableTranslation) stableCount += 1;
       else {
-        stableText = current.text;
+        stableTranslation = signature;
         stableCount = 1;
       }
-      if (!current.generating && stableCount >= (generationSeen ? 1 : 2)) return current.text;
+      const completionMarker = generationSeen || current.copyActions > before.copyActions;
+      if (!current.generating && stableCount >= (completionMarker ? 1 : 3)) return current.translations;
     }
     throw new Error('等待 Microsoft 365 Copilot 回覆逾時（180 秒）。');
   }
@@ -204,8 +226,7 @@ if (!globalThis.__translateWebM365ContentReady) {
       let lastError;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          const response = await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }));
-          return parseTranslationResponse(response, items);
+          return await submitAndWait(buildM365TranslationPrompt(items, { retry: attempt > 0 }), items);
         } catch (error) {
           lastError = error;
         }

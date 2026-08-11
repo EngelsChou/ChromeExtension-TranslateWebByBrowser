@@ -22,6 +22,22 @@
           <option value="m365">Microsoft 365 Copilot</option>
         </select>
       </label>
+      <div class="option-grid">
+        <label class="provider-field" for="scope">
+          <span>翻譯範圍</span>
+          <select id="scope">
+            <option value="main">主要內容（建議）</option>
+            <option value="page">整個頁面</option>
+          </select>
+        </label>
+        <label class="provider-field" for="display-mode">
+          <span>顯示方式</span>
+          <select id="display-mode">
+            <option value="bilingual">雙語對照</option>
+            <option value="replace">只顯示翻譯</option>
+          </select>
+        </label>
+      </div>
       <section class="status-card" aria-live="polite">
         <span id="status-dot" class="dot pending"></span>
         <div>
@@ -38,7 +54,7 @@
         <button id="restore" class="secondary">恢復原文</button>
       </div>
       <p id="error" class="error" role="alert" hidden></p>
-      <p class="privacy">只把可見英文純文字送到你選擇且已登入的服務分頁，不傳送整頁 HTML。</p>
+      <p class="privacy">只傳送段落純文字、穩定 ID 與最小語意提示，不傳送整頁 HTML、DOM、Cookie 或登入資料。</p>
     </main>
     <script src="popup.js"></script>
   </body>
