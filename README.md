@@ -2,7 +2,7 @@
 
 可直接載入 Chrome 的 Manifest V3 Extension。它辨識網頁主要內容，將英文段落透過使用者已登入的 **ChatGPT** 或 **Microsoft 365 Copilot** 網頁翻成台灣繁體中文，並以雙語對照或只顯示翻譯的方式原地呈現。一般使用不需要 npm、Node.js、指令、localhost bridge、Native Messaging 或 AI API。
 
-[English](README.en.md)
+[English ↓](#english)
 
 ## 安裝（一般使用者不需要 npm）
 
@@ -103,3 +103,110 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 - ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
 - 實際等待時間仍取決於 provider、帳號負載、網路與 Chrome 背景分頁節流；網頁上的計時可用來區分「provider 尚在回覆」與 Extension 沒有運作。
 - 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。
+
+---
+
+<a id="english"></a>
+
+# English
+
+A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage content, translates English blocks into Taiwan Traditional Chinese through the user's signed-in **ChatGPT** or **Microsoft 365 Copilot** webpage, and renders bilingual or translation-only content in place. Normal use requires no npm, Node.js, command, localhost bridge, Native Messaging, or AI API.
+
+[繁體中文 ↑](#translate-web-by-browser-ai) · [Standalone English README](README.en.md)
+
+## Installation (regular users do not need npm)
+
+1. Download and extract `translate-web-by-browser-ai-v0.6.1.zip`.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Select **Load unpacked**:
+   - Release ZIP: choose the extracted folder containing `manifest.json`.
+   - GitHub **Source code ZIP**: choose its `extension/` folder.
+
+`extension/` already contains every compiled JavaScript file. No npm or terminal command is needed after installation.
+
+## Usage
+
+1. Select the extension icon on the webpage to translate.
+2. Choose `ChatGPT` or `Microsoft 365 Copilot`. Opening the popup or changing this selection never opens a provider automatically.
+3. Choose a scope:
+   - **Main content (recommended)**: identifies `main`, `article`, or `[role=main]` and excludes navigation, footers, and sidebars.
+   - **Whole page**: translates every recognizable rendered block, including navigation areas.
+4. Choose **Bilingual** or **Translation only**.
+5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
+6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
+
+Translation progress remains visible at the bottom-right of the original webpage after the popup closes. Every paragraph intersecting the current viewport is placed in the first priority batch. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON, so the visible page does not wait for the entire response or offscreen content.
+
+ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
+
+ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
+
+## Block-level architecture
+
+```text
+Current-page content script
+  ├─ selects main-content or whole-page scope
+  ├─ collects rendered h1-h6 / p / li / td / blockquote blocks
+  ├─ includes article content outside the current viewport
+  ├─ creates stable block IDs and retains original DOM children
+  └─ emits only {id, text, context:{type, heading}}
+           ↕ Chrome runtime messaging
+Manifest V3 service worker
+  ├─ puts every current-viewport paragraph in the first priority batch
+  ├─ continues with up to 24 blocks / about 5,000 characters per batch
+  ├─ streams each completed, validated JSON paragraph to the page immediately
+  ├─ retains progress and the last error across popup closure
+  ├─ revalidates complete IDs/schema and applied counts
+  └─ stops safely when page rerenders invalidate mappings
+           ↕ Chrome runtime messaging
+Provider content script
+  ├─ operates the signed-in ChatGPT / M365 composer
+  ├─ adapts prompt wording for ChatGPT / M365 and requires one strict JSON object
+  ├─ validates every JSON candidate, ignoring prompt examples and suggestions
+  └─ follows ask-bridge's M365 Stop, Copy-action, new-response, and stability signals
+```
+
+Bilingual mode preserves original links, formatting, and event nodes while inserting a separate `lang="zh-Hant-TW"` translation element. Translation-only mode hides the retained original wrapper. Restore moves the original children back into place without reloading the page.
+
+## Transmitted data and privacy
+
+The extension **never sends the full HTML or DOM structure**. Each block sends only:
+
+- a stable opaque ID
+- plain text
+- minimal semantic hints: element type and nearest heading
+
+It does not send classes, CSS, events, form values, cookies, tokens, or credentials. Collection skips hidden content, scripts, styles, SVG/canvas, code, form/editable areas, `translate=no`, URLs, email addresses, numeric-only content, and text that is not primarily Latin-script.
+
+Permissions:
+
+- `activeTab`: accesses the current page after explicit user action.
+- `scripting`: injects the page translator and provider connection scripts.
+- `storage`: retains provider, scope, display mode, and session progress.
+- `chatgpt.com` / `chat.openai.com`: operates the user's ChatGPT tab.
+- `m365.cloud.microsoft`: operates the user's Microsoft 365 Copilot tab.
+
+Web text is untrusted data; the prompt explicitly ignores embedded instructions. Text and responses still pass through the selected service and may remain in chat history. Account, tenant, DLP, and data-governance policies apply.
+
+## Known limitations
+
+- Both modes automate web UIs, not official APIs; provider DOM changes may require an update.
+- Sign-in, MFA, CAPTCHA, and organizational consent require user interaction. Passwords, cookies, and tokens are never read.
+- M365 requires Copilot Chat entitlement. A `/chat/blocked` redirect stops translation with an entitlement/policy error.
+- Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and canvas content are not translated.
+- If an SPA replaces blocks during translation, the extension rejects mappings that can no longer be applied; restore and retry.
+- Very long individual blocks, provider usage limits, background throttling, or invalid JSON may time out; invalid batches are never applied.
+- Translation speed still depends on the selected provider, account capacity, network, and background-tab throttling. The on-page timer distinguishes provider waiting from a stalled extension.
+- A 5-second result cannot be guaranteed for remote web providers. In the documented Microsoft Learn viewport smoke test, ChatGPT completed eight visible blocks in about 3.5 seconds, while M365 took about 16.5 seconds because its web UI exposed the response only after completion.
+
+## Development
+
+Node.js 22 or newer and npm are required only to modify or package the source:
+
+```powershell
+npm install
+npm run check
+npm run package
+```
+
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.6.1.zip`.
