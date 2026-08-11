@@ -70,6 +70,49 @@ async function findOrCreateProviderTab(provider) {
   return { tab, status };
 }
 
+async function createProviderWorker(provider, sourceTab, targetTab) {
+  let workerTab;
+  let workerWindow;
+  try {
+    workerTab = await chrome.tabs.duplicate(sourceTab.id);
+    if (!workerTab?.id) throw new Error('無法複製 provider 分頁');
+    workerWindow = await chrome.windows.create({
+      tabId: workerTab.id,
+      type: 'popup',
+      focused: false,
+      width: 520,
+      height: 760,
+    });
+    if (!workerWindow?.id) throw new Error('無法建立 provider 工作視窗');
+    await chrome.tabs.update(workerTab.id, { active: true, autoDiscardable: false });
+    await chrome.tabs.update(targetTab.id, { active: true });
+    await chrome.windows.update(targetTab.windowId, { focused: true });
+    const status = await waitForProviderContent(workerTab.id, provider);
+    if (!status.ready || status.blocked || status.hasDraft) {
+      throw new Error(status.message || `${provider.name} 工作視窗尚未就緒。`);
+    }
+    return {
+      tab: workerTab,
+      dedicated: true,
+      async close() {
+        try { await chrome.windows.remove(workerWindow.id); } catch { /* already closed */ }
+      },
+    };
+  } catch (error) {
+    if (workerWindow?.id) {
+      try { await chrome.windows.remove(workerWindow.id); } catch { /* already closed */ }
+    } else if (workerTab?.id) {
+      try { await chrome.tabs.remove(workerTab.id); } catch { /* already closed */ }
+    }
+    return {
+      tab: sourceTab,
+      dedicated: false,
+      warning: `無法建立作用中的 provider 工作視窗，改用既有背景分頁：${error.message}`,
+      async close() {},
+    };
+  }
+}
+
 async function providerStatus(providerId) {
   const provider = getProvider(providerId);
   const tab = await findExistingProviderTab(provider);
@@ -124,7 +167,7 @@ function applyPartialTranslations(message, sender) {
   pending.applyChain = pending.applyChain.then(async () => {
     const candidates = (message.translations ?? [])
       .filter(({ id }) => !pending.appliedIds.has(id));
-    if (!candidates.length) return { applied: 0 };
+    if (!candidates.length) return { applied: 0, duplicate: true };
     const candidateIds = new Set(candidates.map(({ id }) => id));
     const expectedItems = pending.batch.filter(({ id }) => candidateIds.has(id));
     const translations = validateTranslations(candidates, expectedItems);
@@ -178,52 +221,58 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
     throw new Error(status.message || `請先在 ${provider.name} 分頁完成登入或處理帳戶提示。`);
   }
 
+  const worker = await createProviderWorker(provider, providerTab, targetTab);
+  const translationTab = worker.tab;
   const batches = createBatches(items);
   let translated = 0;
   context.total = batches.length;
   context.translated = translated;
 
-  for (let index = 0; index < batches.length; index += 1) {
-    const batch = batches[index];
-    updateJob({
-      state: 'running', stage: 'waiting', provider: provider.id, providerName: provider.name,
-      scope, displayMode, completed: index, total: batches.length, translated, blocks: items.length,
-      startedAt: context.startedAt,
-    }, targetTab.id);
-    const requestId = crypto.randomUUID();
-    const pending = {
-      requestId, providerTabId: providerTab.id, provider, targetTabId: targetTab.id,
-      batch, batchIndex: index, totalBatches: batches.length, displayMode, scope, context,
-      appliedIds: new Set(), applyChain: Promise.resolve(),
-    };
-    pendingRequests.set(requestId, pending);
-    try {
-      const result = await chrome.tabs.sendMessage(providerTab.id, {
-        type: 'PROVIDER_TRANSLATE_BATCH', items: batch, requestId,
-      });
-      await pending.applyChain;
-      if (!result?.ok) throw new Error(result?.error || `${provider.name} 沒有回傳可用的翻譯。`);
-      const translations = validateTranslations(result.translations, batch);
-      const remaining = translations.filter(({ id }) => !pending.appliedIds.has(id));
-      if (remaining.length) {
-        const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
-          type: 'APPLY_TRANSLATIONS', translations: remaining, displayMode,
+  try {
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      updateJob({
+        state: 'running', stage: 'waiting', provider: provider.id, providerName: provider.name,
+        scope, displayMode, completed: index, total: batches.length, translated, blocks: items.length,
+        workerActive: worker.dedicated, warning: worker.warning, startedAt: context.startedAt,
+      }, targetTab.id);
+      const requestId = crypto.randomUUID();
+      const pending = {
+        requestId, providerTabId: translationTab.id, provider, targetTabId: targetTab.id,
+        batch, batchIndex: index, totalBatches: batches.length, displayMode, scope, context,
+        appliedIds: new Set(), applyChain: Promise.resolve(),
+      };
+      pendingRequests.set(requestId, pending);
+      try {
+        const result = await chrome.tabs.sendMessage(translationTab.id, {
+          type: 'PROVIDER_TRANSLATE_BATCH', items: batch, requestId,
         });
-        if (applyResult.applied !== remaining.length) {
-          throw new Error(`原網頁在翻譯期間已重繪，${remaining.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
+        await pending.applyChain;
+        if (!result?.ok) throw new Error(result?.error || `${provider.name} 沒有回傳可用的翻譯。`);
+        const translations = validateTranslations(result.translations, batch);
+        const remaining = translations.filter(({ id }) => !pending.appliedIds.has(id));
+        if (remaining.length) {
+          const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
+            type: 'APPLY_TRANSLATIONS', translations: remaining, displayMode,
+          });
+          if (applyResult.applied !== remaining.length) {
+            throw new Error(`原網頁在翻譯期間已重繪，${remaining.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
+          }
+          context.translated += applyResult.applied;
         }
-        context.translated += applyResult.applied;
+      } finally {
+        pendingRequests.delete(requestId);
       }
-    } finally {
-      pendingRequests.delete(requestId);
+      translated = context.translated;
+      updateJob({
+        state: 'running', stage: 'applied', provider: provider.id, providerName: provider.name,
+        scope, displayMode,
+        completed: index + 1, total: batches.length, translated, blocks: items.length,
+        workerActive: worker.dedicated, warning: worker.warning, startedAt: context.startedAt,
+      }, targetTab.id);
     }
-    translated = context.translated;
-    updateJob({
-      state: 'running', stage: 'applied', provider: provider.id, providerName: provider.name,
-      scope, displayMode,
-      completed: index + 1, total: batches.length, translated, blocks: items.length,
-      startedAt: context.startedAt,
-    }, targetTab.id);
+  } finally {
+    await worker.close();
   }
 
   return { translated, total: items.length, batches: batches.length };

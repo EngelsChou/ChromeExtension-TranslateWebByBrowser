@@ -84,6 +84,28 @@ test('both providers stream validated paragraph objects back to the source page'
   assert.match(contentSource, /可視區翻譯已開始顯示/u);
 });
 
+test('each streamed provider result waits for source-page acknowledgement', () => {
+  for (const providerSource of [chatgptSource, m365Source]) {
+    assert.match(providerSource, /const acknowledgement = await chrome\.runtime\.sendMessage/u);
+    assert.match(providerSource, /acknowledgement\.applied !== partial\.length/u);
+    assert.match(providerSource, /partial\.forEach\(\(\{ id \}\) => emittedIds\.add\(id\)\)/u);
+  }
+  assert.match(backgroundSource, /await chrome\.tabs\.sendMessage\(pending\.targetTabId/u);
+});
+
+test('bilingual results place a Chinese block after the original English content', () => {
+  assert.match(contentSource, /entry\.element\.append\(originalWrapper, translationElement\)/u);
+  assert.match(contentSource, /translationElement\.style\.display = displayMode === 'replace' \? 'contents' : 'block'/u);
+  assert.match(contentSource, /translationElement\.setAttribute\('lang', 'zh-Hant-TW'\)/u);
+});
+
+test('translation runs in an unfocused active provider worker window and cleans it up', () => {
+  assert.match(backgroundSource, /chrome\.tabs\.duplicate\(sourceTab\.id\)/u);
+  assert.match(backgroundSource, /chrome\.windows\.create\(\{[\s\S]*?focused: false/u);
+  assert.match(backgroundSource, /chrome\.tabs\.update\(workerTab\.id, \{ active: true, autoDiscardable: false \}\)/u);
+  assert.match(backgroundSource, /await worker\.close\(\)/u);
+});
+
 test('ChatGPT composer integration updates React state and fails fast before an unsent retry', () => {
   assert.match(chatgptSource, /ClipboardEvent\('paste'/u);
   assert.match(chatgptSource, /new InputEvent\('input'/u);

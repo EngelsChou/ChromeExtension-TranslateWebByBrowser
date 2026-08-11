@@ -213,10 +213,14 @@ if (!globalThis.__translateWebM365ContentReady) {
         .flatMap((candidate) => parsePartialTranslationResponse(candidate, items))
         .filter(({ id }) => !emittedIds.has(id));
       if (partial.length && requestId) {
-        partial.forEach(({ id }) => emittedIds.add(id));
-        chrome.runtime.sendMessage({
+        const acknowledgement = await chrome.runtime.sendMessage({
           type: 'PROVIDER_TRANSLATION_PARTIAL', requestId, translations: partial,
-        }).catch(() => {});
+        });
+        if (!acknowledgement?.ok
+          || (acknowledgement.applied !== partial.length && !acknowledgement.duplicate)) {
+          throw new Error('原網頁未確認套用 Microsoft 365 Copilot 翻譯，已停止以避免遺漏中文。');
+        }
+        partial.forEach(({ id }) => emittedIds.add(id));
       }
       if (!current.translations) continue;
       const signature = JSON.stringify(current.translations);

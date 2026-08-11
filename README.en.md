@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.6.1.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.7.0.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -31,6 +31,8 @@ ChatGPT composer submission treats its enabled Send button as the source of trut
 
 ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
 
+During translation, the extension runs ChatGPT or M365 in a dedicated provider worker window without taking focus from the original page. The provider remains the active tab in that window, reducing cases where background rendering pauses until the user switches tabs. The worker closes automatically when the job finishes. If Chrome cannot create it, the extension falls back to the existing provider tab and reports a progress warning.
+
 ## Block-level architecture
 
 ```text
@@ -44,7 +46,8 @@ Current-page content script
 Manifest V3 service worker
   ├─ puts every current-viewport paragraph in the first priority batch
   ├─ continues with up to 24 blocks / about 5,000 characters per batch
-  ├─ streams each completed, validated JSON paragraph to the page immediately
+  ├─ creates an unfocused active provider worker window and closes it afterward
+  ├─ requires source-page acknowledgement for each valid streamed result
   ├─ retains progress and the last error across popup closure
   ├─ revalidates complete IDs/schema and applied counts
   └─ stops safely when page rerenders invalidate mappings
@@ -53,10 +56,11 @@ Provider content script
   ├─ operates the signed-in ChatGPT / M365 composer
   ├─ adapts prompt wording for ChatGPT / M365 and requires one strict JSON object
   ├─ validates every JSON candidate, ignoring prompt examples and suggestions
+  ├─ marks a paragraph sent only after the source page confirms it was applied
   └─ follows ask-bridge's M365 Stop, Copy-action, new-response, and stability signals
 ```
 
-Bilingual mode preserves original links, formatting, and event nodes while inserting a separate `lang="zh-Hant-TW"` translation element. Translation-only mode hides the retained original wrapper. Restore moves the original children back into place without reloading the page.
+Bilingual mode preserves original links, formatting, and event nodes while inserting a separate block-level `lang="zh-Hant-TW"` translation element directly below its English block. Each streamed result is acknowledged only after this DOM update succeeds. Translation-only mode hides the retained original wrapper. Restore moves the original children back into place without reloading the page.
 
 ## Transmitted data and privacy
 
@@ -85,8 +89,8 @@ Web text is untrusted data; the prompt explicitly ignores embedded instructions.
 - M365 requires Copilot Chat entitlement. A `/chat/blocked` redirect stops translation with an entitlement/policy error.
 - Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and canvas content are not translated.
 - If an SPA replaces blocks during translation, the extension rejects mappings that can no longer be applied; restore and retry.
-- Very long individual blocks, provider usage limits, background throttling, or invalid JSON may time out; invalid batches are never applied.
-- Translation speed still depends on the selected provider, account capacity, network, and background-tab throttling. The on-page timer distinguishes provider waiting from a stalled extension.
+- Very long individual blocks, provider usage limits, or invalid JSON may time out; invalid batches are never applied. The worker window reduces background throttling but cannot improve provider generation speed.
+- Translation speed still depends on the selected provider, account capacity, and network. The on-page timer distinguishes provider waiting from a stalled extension.
 - A 5-second result cannot be guaranteed for remote web providers. In the documented Microsoft Learn viewport smoke test, ChatGPT completed eight visible blocks in about 3.5 seconds, while M365 took about 16.5 seconds because its web UI exposed the response only after completion.
 
 ## Development
@@ -99,4 +103,4 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.6.1.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.0.zip`.

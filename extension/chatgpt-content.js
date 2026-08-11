@@ -204,13 +204,15 @@
         if (!isNew || !text) continue;
         const partial = parsePartialTranslationResponse(text, items).filter(({ id }) => !emittedIds.has(id));
         if (partial.length && requestId) {
-          partial.forEach(({ id }) => emittedIds.add(id));
-          chrome.runtime.sendMessage({
+          const acknowledgement = await chrome.runtime.sendMessage({
             type: "PROVIDER_TRANSLATION_PARTIAL",
             requestId,
             translations: partial
-          }).catch(() => {
           });
+          if (!acknowledgement?.ok || acknowledgement.applied !== partial.length && !acknowledgement.duplicate) {
+            throw new Error("\u539F\u7DB2\u9801\u672A\u78BA\u8A8D\u5957\u7528 ChatGPT \u7FFB\u8B6F\uFF0C\u5DF2\u505C\u6B62\u4EE5\u907F\u514D\u907A\u6F0F\u4E2D\u6587\u3002");
+          }
+          partial.forEach(({ id }) => emittedIds.add(id));
         }
         if (!streaming) {
           try {
