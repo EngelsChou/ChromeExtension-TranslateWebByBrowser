@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.3.1.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.3.2.zip`。
 2. 開啟 `chrome://extensions` 並啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 使用發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -19,12 +19,12 @@
 ## 使用方式
 
 1. 在要翻譯的網頁按 Extension 圖示。
-2. 在「翻譯服務」選擇 `ChatGPT` 或 `Microsoft 365 Copilot`；選擇會保存在 Chrome 本機。
-3. 第一次使用時按登入按鈕，在開啟的服務分頁親自完成登入、MFA 或組織驗證。
+2. 在「翻譯服務」選擇 `ChatGPT` 或 `Microsoft 365 Copilot`；選擇會保存在 Chrome 本機。單純開啟 popup 或切換選項不會建立、開啟或切換到任何服務分頁。
+3. 第一次使用時，確認 provider 後再按登入按鈕；只有此時才會開啟所選服務，讓使用者親自完成登入、MFA 或組織驗證。
 4. 回到原網頁，再次開啟 popup 並按「翻譯目前頁面」。
 5. 按「恢復原文」可還原目前頁面生命週期內已翻譯的 Text Nodes。
 
-ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsoft/chat/`。Extension 會重用對應分頁；若發現輸入框已有草稿，會另外建立空白對話，避免覆寫使用者文字。
+ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsoft/chat/`。狀態檢查只讀取既有分頁；按登入或開始翻譯後，Extension 才會重用或建立所選服務分頁。若輸入框已有草稿，會另外建立空白對話，避免覆寫使用者文字。
 
 ## 架構
 
@@ -35,7 +35,8 @@ ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsof
   └─ 只輸出 {id, text}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ 依 popup 選擇尋找或建立 ChatGPT / M365 分頁
+  ├─ popup 狀態檢查只查詢既有分頁，不自動開啟 provider
+  ├─ 使用者按登入/翻譯後才尋找或建立所選服務分頁
   ├─ 每批最多 30 段、約 6,000 字元
   └─ 套用前再次驗證完整 ID/schema
            ↕ Chrome runtime messaging
@@ -78,4 +79,4 @@ npm run check
 npm run package
 ```
 
-`npm run check` 依序執行 build、lint、test。build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布暫存內容至 `dist/extension/`；發布 ZIP 在 `dist/release/translate-web-by-browser-ai-v0.3.1.zip`。
+`npm run check` 依序執行 build、lint、test。build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布暫存內容至 `dist/extension/`；發布 ZIP 在 `dist/release/translate-web-by-browser-ai-v0.3.2.zip`。

@@ -106,14 +106,13 @@
     }
     throw new Error(`${provider.name} \u5206\u9801\u8F09\u5165\u903E\u6642\uFF1A${lastError?.message ?? "content script \u5C1A\u672A\u5C31\u7DD2"}`);
   }
-  async function findOrCreateProviderTab(provider) {
+  async function findExistingProviderTab(provider) {
     const tabs = await chrome.tabs.query({ url: provider.tabPatterns });
-    let tab = tabs.find((candidate) => candidate.status === "complete" && !candidate.discarded) ?? tabs[0];
+    return tabs.find((candidate) => candidate.status === "complete" && !candidate.discarded) ?? tabs.find((candidate) => !candidate.discarded) ?? null;
+  }
+  async function findOrCreateProviderTab(provider) {
+    let tab = await findExistingProviderTab(provider);
     if (!tab) tab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
-    if (tab.discarded) {
-      await chrome.tabs.reload(tab.id);
-      tab = await chrome.tabs.get(tab.id);
-    }
     if (!tab?.id) throw new Error(`\u7121\u6CD5\u5EFA\u7ACB ${provider.name} \u5206\u9801\u3002`);
     await chrome.tabs.update(tab.id, { autoDiscardable: false });
     let status = await waitForProviderContent(tab.id, provider);
@@ -126,13 +125,21 @@
     }
     return { tab, status };
   }
-  async function providerStatus(providerId, { activate = false } = {}) {
+  async function providerStatus(providerId) {
     const provider = getProvider(providerId);
-    const { tab, status } = await findOrCreateProviderTab(provider);
-    if (activate || !status.ready) {
-      await chrome.tabs.update(tab.id, { active: true });
-      await chrome.windows.update(tab.windowId, { focused: true });
+    const tab = await findExistingProviderTab(provider);
+    if (!tab?.id) {
+      return {
+        provider: provider.id,
+        providerName: provider.name,
+        providerReady: false,
+        signedOut: false,
+        blocked: false,
+        tabId: null,
+        message: `\u5C1A\u672A\u958B\u555F ${provider.name}\u3002\u8ACB\u5148\u78BA\u8A8D\u9078\u64C7\uFF0C\u518D\u6309\u4E0B\u65B9\u767B\u5165\u6309\u9215\u3002`
+      };
     }
+    const status = await waitForProviderContent(tab.id, provider);
     return {
       provider: provider.id,
       providerName: provider.name,
@@ -145,8 +152,7 @@
   }
   async function openProvider(providerId) {
     const provider = getProvider(providerId);
-    const tabs = await chrome.tabs.query({ url: provider.tabPatterns });
-    let tab = tabs.find((candidate) => !candidate.discarded) ?? tabs[0];
+    let tab = await findExistingProviderTab(provider);
     if (!tab) tab = await chrome.tabs.create({ url: provider.homeUrl, active: true });
     if (!tab?.id) throw new Error(`\u7121\u6CD5\u5EFA\u7ACB ${provider.name} \u5206\u9801\u3002`);
     await chrome.tabs.update(tab.id, { active: true, autoDiscardable: false });

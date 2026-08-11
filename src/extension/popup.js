@@ -36,7 +36,7 @@ function showConnectionState(ready) {
 
 async function checkStatus() {
   const provider = selectedProvider();
-  setStatus('pending', `正在檢查 ${provider.name}`, '正在尋找或建立服務分頁…');
+  setStatus('pending', `已選擇 ${provider.name}`, '只檢查既有分頁，不會自動開啟服務。');
   showConnectionState(false);
   const result = await chrome.runtime.sendMessage({ type: 'GET_PROVIDER_STATUS', provider: provider.id });
   if (provider.id !== elements.provider.value) return;

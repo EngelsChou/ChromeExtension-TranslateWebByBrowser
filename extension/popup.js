@@ -57,7 +57,7 @@
   }
   async function checkStatus() {
     const provider = selectedProvider();
-    setStatus("pending", `\u6B63\u5728\u6AA2\u67E5 ${provider.name}`, "\u6B63\u5728\u5C0B\u627E\u6216\u5EFA\u7ACB\u670D\u52D9\u5206\u9801\u2026");
+    setStatus("pending", `\u5DF2\u9078\u64C7 ${provider.name}`, "\u53EA\u6AA2\u67E5\u65E2\u6709\u5206\u9801\uFF0C\u4E0D\u6703\u81EA\u52D5\u958B\u555F\u670D\u52D9\u3002");
     showConnectionState(false);
     const result = await chrome.runtime.sendMessage({ type: "GET_PROVIDER_STATUS", provider: provider.id });
     if (provider.id !== elements.provider.value) return;

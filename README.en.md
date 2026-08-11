@@ -6,7 +6,7 @@ A self-contained Manifest V3 Chrome Extension. It captures visible English text 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.3.1.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.3.2.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - For the release ZIP, choose the extracted folder that directly contains `manifest.json`.
@@ -19,12 +19,12 @@ After installation, use only the extension icon; no command needs to be run for 
 ## Usage
 
 1. Select the extension icon on the webpage to translate.
-2. Choose `ChatGPT` or `Microsoft 365 Copilot`; the selection is retained in local Chrome storage.
-3. On first use, open the provider tab and personally complete sign-in, MFA, or organizational verification.
+2. Choose `ChatGPT` or `Microsoft 365 Copilot`; the selection is retained in local Chrome storage. Merely opening the popup or changing the selection never creates, opens, or activates a provider tab.
+3. On first use, confirm the provider and then select its sign-in button. Only this explicit action opens the selected service for sign-in, MFA, or organizational verification.
 4. Return to the original page, reopen the popup, and select **Translate current page**.
 5. Select **Restore original** to restore text nodes translated during the current page lifetime.
 
-ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. The extension reuses the matching tab. If its composer contains a draft, it opens a fresh conversation rather than overwriting user text.
+ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. Status checks only inspect existing tabs. The extension reuses or creates the selected service tab only after sign-in or translation is explicitly selected. If its composer contains a draft, it opens a fresh conversation rather than overwriting user text.
 
 ## Architecture
 
@@ -35,7 +35,8 @@ Current-page content script
   └─ emits only {id, text}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ finds or creates the selected ChatGPT / M365 tab
+  ├─ popup status checks inspect existing tabs without opening a provider
+  ├─ finds or creates the selected provider only after sign-in/translation
   ├─ batches up to 30 segments and about 6,000 characters
   └─ revalidates the complete ID/schema before applying results
            ↕ Chrome runtime messaging
@@ -78,4 +79,4 @@ npm run check
 npm run package
 ```
 
-`npm run check` runs build, lint, and test in order. The build updates the directly loadable, version-controlled `extension/` folder and copies release staging files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.3.1.zip`.
+`npm run check` runs build, lint, and test in order. The build updates the directly loadable, version-controlled `extension/` folder and copies release staging files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.3.2.zip`.

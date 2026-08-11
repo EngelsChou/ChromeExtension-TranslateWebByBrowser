@@ -38,3 +38,12 @@ test('the repository extension folder contains every manifest entry point', asyn
   ];
   await Promise.all([...new Set(files)].map((file) => access(new URL(`../extension/${file}`, import.meta.url))));
 });
+
+test('opening the popup cannot create or activate a provider tab', () => {
+  const statusHandler = backgroundSource.slice(
+    backgroundSource.indexOf('async function providerStatus'),
+    backgroundSource.indexOf('async function openProvider'),
+  );
+  assert.match(statusHandler, /findExistingProviderTab/u);
+  assert.doesNotMatch(statusHandler, /findOrCreateProviderTab|tabs\.create|tabs\.update|windows\.update/u);
+});

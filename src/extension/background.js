@@ -46,14 +46,16 @@ async function waitForProviderContent(tabId, provider, timeout = 25_000) {
   throw new Error(`${provider.name} 分頁載入逾時：${lastError?.message ?? 'content script 尚未就緒'}`);
 }
 
-async function findOrCreateProviderTab(provider) {
+async function findExistingProviderTab(provider) {
   const tabs = await chrome.tabs.query({ url: provider.tabPatterns });
-  let tab = tabs.find((candidate) => candidate.status === 'complete' && !candidate.discarded) ?? tabs[0];
+  return tabs.find((candidate) => candidate.status === 'complete' && !candidate.discarded)
+    ?? tabs.find((candidate) => !candidate.discarded)
+    ?? null;
+}
+
+async function findOrCreateProviderTab(provider) {
+  let tab = await findExistingProviderTab(provider);
   if (!tab) tab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
-  if (tab.discarded) {
-    await chrome.tabs.reload(tab.id);
-    tab = await chrome.tabs.get(tab.id);
-  }
   if (!tab?.id) throw new Error(`無法建立 ${provider.name} 分頁。`);
   await chrome.tabs.update(tab.id, { autoDiscardable: false });
   let status = await waitForProviderContent(tab.id, provider);
@@ -67,13 +69,21 @@ async function findOrCreateProviderTab(provider) {
   return { tab, status };
 }
 
-async function providerStatus(providerId, { activate = false } = {}) {
+async function providerStatus(providerId) {
   const provider = getProvider(providerId);
-  const { tab, status } = await findOrCreateProviderTab(provider);
-  if (activate || !status.ready) {
-    await chrome.tabs.update(tab.id, { active: true });
-    await chrome.windows.update(tab.windowId, { focused: true });
+  const tab = await findExistingProviderTab(provider);
+  if (!tab?.id) {
+    return {
+      provider: provider.id,
+      providerName: provider.name,
+      providerReady: false,
+      signedOut: false,
+      blocked: false,
+      tabId: null,
+      message: `尚未開啟 ${provider.name}。請先確認選擇，再按下方登入按鈕。`,
+    };
   }
+  const status = await waitForProviderContent(tab.id, provider);
   return {
     provider: provider.id,
     providerName: provider.name,
@@ -89,8 +99,7 @@ async function providerStatus(providerId, { activate = false } = {}) {
 
 async function openProvider(providerId) {
   const provider = getProvider(providerId);
-  const tabs = await chrome.tabs.query({ url: provider.tabPatterns });
-  let tab = tabs.find((candidate) => !candidate.discarded) ?? tabs[0];
+  let tab = await findExistingProviderTab(provider);
   if (!tab) tab = await chrome.tabs.create({ url: provider.homeUrl, active: true });
   if (!tab?.id) throw new Error(`無法建立 ${provider.name} 分頁。`);
   await chrome.tabs.update(tab.id, { active: true, autoDiscardable: false });
