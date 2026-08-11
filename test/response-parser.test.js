@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseFirstValidTranslationResponse,
+  parsePartialTranslationResponse,
   parseTranslationResponse,
   validateTranslations,
 } from '../src/extension/chatgpt-core.js';
@@ -57,4 +58,18 @@ test('rejects a long English echo as an untranslated response', () => {
   const source = [{ id: 'tn-long', text: 'This paragraph contains enough English words to require a real translation.' }];
   const echo = '{"translations":[{"id":"tn-long","text":"This paragraph contains enough English words to require a real translation."}]}';
   assert.throws(() => parseTranslationResponse(echo, source), /不像台灣繁體中文/u);
+});
+
+test('extracts complete translated paragraph objects from an unfinished JSON stream', () => {
+  const streaming = '{"translations":[{"id":"tn-one","text":"哈囉"},{"id":"tn-two","text":"世';
+  assert.deepEqual(parsePartialTranslationResponse(streaming, expected), [
+    { id: 'tn-one', text: '哈囉' },
+  ]);
+});
+
+test('partial stream parsing ignores schema examples and untranslated echoes', () => {
+  const longExpected = [{ id: 'tn-long', text: 'This paragraph contains enough English words for validation.' }];
+  const streaming = '{"id":"same-id","text":"translated text"}\n'
+    + '{"id":"tn-long","text":"This paragraph contains enough English words for validation."}';
+  assert.deepEqual(parsePartialTranslationResponse(streaming, longExpected), []);
 });

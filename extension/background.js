@@ -9,7 +9,10 @@
     const batches = [];
     let batch = [];
     let characters = 0;
-    for (const item of items) {
+    const viewportItems = items.filter((item) => item.viewport);
+    const queuedItems = items.filter((item) => !item.viewport);
+    if (viewportItems.length) batches.push(viewportItems);
+    for (const item of queuedItems) {
       const size = item.text.length;
       const itemLimit = batches.length === 0 ? firstMaxItems : maxItems;
       const characterLimit = batches.length === 0 ? firstMaxCharacters : maxCharacters;
@@ -78,6 +81,7 @@
 
   // src/extension/background.js
   var translationQueue = Promise.resolve();
+  var pendingRequests = /* @__PURE__ */ new Map();
   async function activeTargetTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("\u627E\u4E0D\u5230\u76EE\u524D\u4F5C\u7528\u4E2D\u7684\u5206\u9801\u3002");
@@ -183,6 +187,42 @@
     }
     return job;
   }
+  function applyPartialTranslations(message, sender) {
+    const pending = pendingRequests.get(message.requestId);
+    if (!pending || sender.tab?.id !== pending.providerTabId) return Promise.resolve({ ignored: true });
+    pending.applyChain = pending.applyChain.then(async () => {
+      const candidates = (message.translations ?? []).filter(({ id }) => !pending.appliedIds.has(id));
+      if (!candidates.length) return { applied: 0 };
+      const candidateIds = new Set(candidates.map(({ id }) => id));
+      const expectedItems = pending.batch.filter(({ id }) => candidateIds.has(id));
+      const translations = validateTranslations(candidates, expectedItems);
+      const result = await chrome.tabs.sendMessage(pending.targetTabId, {
+        type: "APPLY_TRANSLATIONS",
+        translations,
+        displayMode: pending.displayMode
+      });
+      if (result.applied !== translations.length) {
+        throw new Error("\u539F\u7DB2\u9801\u5728\u4E32\u6D41\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C\u7121\u6CD5\u5B89\u5168\u5957\u7528\u6BB5\u843D\u3002");
+      }
+      translations.forEach(({ id }) => pending.appliedIds.add(id));
+      pending.context.translated = (pending.context.translated ?? 0) + result.applied;
+      updateJob({
+        state: "running",
+        stage: "streaming",
+        provider: pending.provider.id,
+        providerName: pending.provider.name,
+        scope: pending.scope,
+        displayMode: pending.displayMode,
+        completed: pending.batchIndex,
+        total: pending.totalBatches,
+        translated: pending.context.translated,
+        blocks: pending.context.blocks,
+        startedAt: pending.context.startedAt
+      }, pending.targetTabId);
+      return result;
+    });
+    return pending.applyChain;
+  }
   async function translatePage(providerId, { scope = "main", displayMode = "bilingual" } = {}, context = {}) {
     const provider = getProvider(providerId);
     const targetTab = await activeTargetTab();
@@ -246,22 +286,47 @@
         blocks: items.length,
         startedAt: context.startedAt
       }, targetTab.id);
-      const result = await chrome.tabs.sendMessage(providerTab.id, {
-        type: "PROVIDER_TRANSLATE_BATCH",
-        items: batch
-      });
-      if (!result?.ok) throw new Error(result?.error || `${provider.name} \u6C92\u6709\u56DE\u50B3\u53EF\u7528\u7684\u7FFB\u8B6F\u3002`);
-      const translations = validateTranslations(result.translations, batch);
-      const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
-        type: "APPLY_TRANSLATIONS",
-        translations,
-        displayMode
-      });
-      if (applyResult.applied !== translations.length) {
-        throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${translations.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002\u8ACB\u6062\u5FA9\u5F8C\u91CD\u8A66\u3002`);
+      const requestId = crypto.randomUUID();
+      const pending = {
+        requestId,
+        providerTabId: providerTab.id,
+        provider,
+        targetTabId: targetTab.id,
+        batch,
+        batchIndex: index,
+        totalBatches: batches.length,
+        displayMode,
+        scope,
+        context,
+        appliedIds: /* @__PURE__ */ new Set(),
+        applyChain: Promise.resolve()
+      };
+      pendingRequests.set(requestId, pending);
+      try {
+        const result = await chrome.tabs.sendMessage(providerTab.id, {
+          type: "PROVIDER_TRANSLATE_BATCH",
+          items: batch,
+          requestId
+        });
+        await pending.applyChain;
+        if (!result?.ok) throw new Error(result?.error || `${provider.name} \u6C92\u6709\u56DE\u50B3\u53EF\u7528\u7684\u7FFB\u8B6F\u3002`);
+        const translations = validateTranslations(result.translations, batch);
+        const remaining = translations.filter(({ id }) => !pending.appliedIds.has(id));
+        if (remaining.length) {
+          const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
+            type: "APPLY_TRANSLATIONS",
+            translations: remaining,
+            displayMode
+          });
+          if (applyResult.applied !== remaining.length) {
+            throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${remaining.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002\u8ACB\u6062\u5FA9\u5F8C\u91CD\u8A66\u3002`);
+          }
+          context.translated += applyResult.applied;
+        }
+      } finally {
+        pendingRequests.delete(requestId);
       }
-      translated += applyResult.applied;
-      context.translated = translated;
+      translated = context.translated;
       updateJob({
         state: "running",
         stage: "applied",
@@ -330,7 +395,7 @@
     return stored.translationJob ?? null;
   }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    const task = message?.type === "GET_PROVIDER_STATUS" ? providerStatus(message.provider) : message?.type === "OPEN_PROVIDER" ? openProvider(message.provider) : message?.type === "TRANSLATE_PAGE" ? enqueueTranslation(message.provider, {
+    const task = message?.type === "PROVIDER_TRANSLATION_PARTIAL" ? applyPartialTranslations(message, _sender) : message?.type === "GET_PROVIDER_STATUS" ? providerStatus(message.provider) : message?.type === "OPEN_PROVIDER" ? openProvider(message.provider) : message?.type === "TRANSLATE_PAGE" ? enqueueTranslation(message.provider, {
       scope: message.scope === "page" ? "page" : "main",
       displayMode: message.displayMode === "replace" ? "replace" : "bilingual"
     }) : message?.type === "RESTORE_PAGE" ? restorePage(message.provider) : message?.type === "GET_TRANSLATION_JOB" ? translationJob() : null;

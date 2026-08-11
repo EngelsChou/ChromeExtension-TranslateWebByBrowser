@@ -53,7 +53,7 @@ test('opening the popup cannot create or activate a provider tab', () => {
 
 test('translation uses paragraph blocks and verifies every applied result', () => {
   assert.match(backgroundSource, /COLLECT_TRANSLATION_BLOCKS/u);
-  assert.match(backgroundSource, /applyResult\.applied !== translations\.length/u);
+  assert.match(backgroundSource, /applyResult\.applied !== (?:translations|remaining)\.length/u);
   assert.doesNotMatch(backgroundSource, /COLLECT_TEXT_NODES/u);
 });
 
@@ -75,4 +75,18 @@ test('providers accept the first complete schema-valid response without an extra
   assert.doesNotMatch(chatgptSource, /stableCount/u);
   assert.match(chatgptSource, /setTimeout\(resolve, 700\)/u);
   assert.match(m365Source, /sleep\(800\)/u);
+});
+
+test('both providers stream validated paragraph objects back to the source page', () => {
+  assert.match(backgroundSource, /PROVIDER_TRANSLATION_PARTIAL/u);
+  assert.match(chatgptSource, /parsePartialTranslationResponse/u);
+  assert.match(m365Source, /parsePartialTranslationResponse/u);
+  assert.match(contentSource, /可視區翻譯已開始顯示/u);
+});
+
+test('ChatGPT composer integration updates React state and fails fast before an unsent retry', () => {
+  assert.match(chatgptSource, /ClipboardEvent\('paste'/u);
+  assert.match(chatgptSource, /new InputEvent\('input'/u);
+  assert.match(chatgptSource, /尚未送出/u);
+  assert.match(chatgptSource, /傳送按鈕\|尚未送出\|輸入框/u);
 });

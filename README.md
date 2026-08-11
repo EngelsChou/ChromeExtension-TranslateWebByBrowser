@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.5.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.6.0.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -38,7 +38,7 @@ ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsof
   └─ 只輸出 {id, text, context:{type, heading}}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ 第一批最多 4 段、約 900 字元，優先快速顯示
+  ├─ 當下可視區的所有段落都放入第一個優先批次
   ├─ 後續每批最多 24 段、約 5,000 字元
   ├─ 在原網頁顯示經過時間，完成一批就立即套用
   ├─ 保存進度與最後錯誤，popup 關閉後仍可查詢
@@ -93,11 +93,13 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.5.0.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.6.0.zip`。
 
 ## 翻譯速度與進度
 
 - popup 關閉後，原網頁右下角仍會顯示目前階段、已經過秒數、批次與已套用段落數。
-- 目前視窗內的內容會優先進入第一批；第一批完成後立即顯示，不必等整頁翻完。
-- ChatGPT 與 M365 都會在第一個完整且通過 ID/schema 驗證的 JSON 出現後立即套用。
+- 目前視窗內相交的每個標題、段落與清單項目都會進入第一個優先批次；畫面外內容稍後才處理。
+- 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即套用，不等整批或整頁完成。
+- ChatGPT 最新 composer 已加入 paste/input 狀態同步與送出前驗證；若傳送按鈕沒有啟用，會快速失敗並明確顯示「尚未送出」，不再空等 180 秒。
 - 實際等待時間仍取決於 provider、帳號負載、網路與 Chrome 背景分頁節流；網頁上的計時可用來區分「provider 尚在回覆」與 Extension 沒有運作。
+- 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。

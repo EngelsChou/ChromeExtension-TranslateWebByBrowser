@@ -3,6 +3,7 @@ import { validateTranslations } from './chatgpt-core.js';
 import { getProvider, PROVIDERS } from './providers.js';
 
 let translationQueue = Promise.resolve();
+const pendingRequests = new Map();
 
 async function activeTargetTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -117,6 +118,36 @@ function updateJob(detail, targetTabId) {
   return job;
 }
 
+function applyPartialTranslations(message, sender) {
+  const pending = pendingRequests.get(message.requestId);
+  if (!pending || sender.tab?.id !== pending.providerTabId) return Promise.resolve({ ignored: true });
+  pending.applyChain = pending.applyChain.then(async () => {
+    const candidates = (message.translations ?? [])
+      .filter(({ id }) => !pending.appliedIds.has(id));
+    if (!candidates.length) return { applied: 0 };
+    const candidateIds = new Set(candidates.map(({ id }) => id));
+    const expectedItems = pending.batch.filter(({ id }) => candidateIds.has(id));
+    const translations = validateTranslations(candidates, expectedItems);
+    const result = await chrome.tabs.sendMessage(pending.targetTabId, {
+      type: 'APPLY_TRANSLATIONS', translations, displayMode: pending.displayMode,
+    });
+    if (result.applied !== translations.length) {
+      throw new Error('原網頁在串流翻譯期間已重繪，無法安全套用段落。');
+    }
+    translations.forEach(({ id }) => pending.appliedIds.add(id));
+    pending.context.translated = (pending.context.translated ?? 0) + result.applied;
+    updateJob({
+      state: 'running', stage: 'streaming', provider: pending.provider.id,
+      providerName: pending.provider.name, scope: pending.scope,
+      displayMode: pending.displayMode, completed: pending.batchIndex,
+      total: pending.totalBatches, translated: pending.context.translated,
+      blocks: pending.context.blocks, startedAt: pending.context.startedAt,
+    }, pending.targetTabId);
+    return result;
+  });
+  return pending.applyChain;
+}
+
 async function translatePage(providerId, { scope = 'main', displayMode = 'bilingual' } = {}, context = {}) {
   const provider = getProvider(providerId);
   const targetTab = await activeTargetTab();
@@ -159,22 +190,34 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
       scope, displayMode, completed: index, total: batches.length, translated, blocks: items.length,
       startedAt: context.startedAt,
     }, targetTab.id);
-    const result = await chrome.tabs.sendMessage(providerTab.id, {
-      type: 'PROVIDER_TRANSLATE_BATCH',
-      items: batch,
-    });
-    if (!result?.ok) throw new Error(result?.error || `${provider.name} 沒有回傳可用的翻譯。`);
-    const translations = validateTranslations(result.translations, batch);
-    const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
-      type: 'APPLY_TRANSLATIONS',
-      translations,
-      displayMode,
-    });
-    if (applyResult.applied !== translations.length) {
-      throw new Error(`原網頁在翻譯期間已重繪，${translations.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
+    const requestId = crypto.randomUUID();
+    const pending = {
+      requestId, providerTabId: providerTab.id, provider, targetTabId: targetTab.id,
+      batch, batchIndex: index, totalBatches: batches.length, displayMode, scope, context,
+      appliedIds: new Set(), applyChain: Promise.resolve(),
+    };
+    pendingRequests.set(requestId, pending);
+    try {
+      const result = await chrome.tabs.sendMessage(providerTab.id, {
+        type: 'PROVIDER_TRANSLATE_BATCH', items: batch, requestId,
+      });
+      await pending.applyChain;
+      if (!result?.ok) throw new Error(result?.error || `${provider.name} 沒有回傳可用的翻譯。`);
+      const translations = validateTranslations(result.translations, batch);
+      const remaining = translations.filter(({ id }) => !pending.appliedIds.has(id));
+      if (remaining.length) {
+        const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
+          type: 'APPLY_TRANSLATIONS', translations: remaining, displayMode,
+        });
+        if (applyResult.applied !== remaining.length) {
+          throw new Error(`原網頁在翻譯期間已重繪，${remaining.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
+        }
+        context.translated += applyResult.applied;
+      }
+    } finally {
+      pendingRequests.delete(requestId);
     }
-    translated += applyResult.applied;
-    context.translated = translated;
+    translated = context.translated;
     updateJob({
       state: 'running', stage: 'applied', provider: provider.id, providerName: provider.name,
       scope, displayMode,
@@ -227,7 +270,9 @@ async function translationJob() {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const task = message?.type === 'GET_PROVIDER_STATUS'
+  const task = message?.type === 'PROVIDER_TRANSLATION_PARTIAL'
+    ? applyPartialTranslations(message, _sender)
+    : message?.type === 'GET_PROVIDER_STATUS'
     ? providerStatus(message.provider)
     : message?.type === 'OPEN_PROVIDER'
       ? openProvider(message.provider)

@@ -25,3 +25,15 @@ test('uses a small first batch before larger throughput-oriented batches', () =>
   assert.deepEqual(batches.map((batch) => batch.length), [4, 8]);
   assert.deepEqual(batches.flat().map(({ id }) => id), items.map(({ id }) => id));
 });
+
+test('keeps every current-viewport paragraph in the first priority batch', () => {
+  const items = [
+    { id: 'visible-1', text: 'A'.repeat(600), viewport: true },
+    { id: 'visible-2', text: 'B'.repeat(600), viewport: true },
+    { id: 'visible-3', text: 'C'.repeat(600), viewport: true },
+    { id: 'offscreen-1', text: 'D'.repeat(100) },
+  ];
+  const batches = createBatches(items);
+  assert.deepEqual(batches[0].map(({ id }) => id), ['visible-1', 'visible-2', 'visible-3']);
+  assert.deepEqual(batches[1].map(({ id }) => id), ['offscreen-1']);
+});

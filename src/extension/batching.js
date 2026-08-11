@@ -8,7 +8,11 @@ export function createBatches(items, {
   let batch = [];
   let characters = 0;
 
-  for (const item of items) {
+  const viewportItems = items.filter((item) => item.viewport);
+  const queuedItems = items.filter((item) => !item.viewport);
+  if (viewportItems.length) batches.push(viewportItems);
+
+  for (const item of queuedItems) {
     const size = item.text.length;
     const itemLimit = batches.length === 0 ? firstMaxItems : maxItems;
     const characterLimit = batches.length === 0 ? firstMaxCharacters : maxCharacters;

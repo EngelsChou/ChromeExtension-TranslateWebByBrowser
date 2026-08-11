@@ -16,6 +16,12 @@ if (!globalThis.__translateWebContentReady) {
     return innerHeight * 2 + Math.abs(rect.bottom);
   }
 
+  function isInViewport(element) {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.right >= 0
+      && rect.top <= innerHeight && rect.left <= innerWidth;
+  }
+
   function progressElements() {
     let panel = document.querySelector('[data-twbt-ui="progress"]');
     if (panel) return {
@@ -60,6 +66,9 @@ if (!globalThis.__translateWebContentReady) {
     }
     if (job.stage === 'collecting') return ['正在分析網頁內容…', `已經過 ${elapsed} 秒`];
     if (job.stage === 'connecting') return [`正在連接 ${provider}…`, `已找到 ${job.blocks || 0} 個英文段落 · ${elapsed} 秒`];
+    if (job.stage === 'streaming') {
+      return ['可視區翻譯已開始顯示', `已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落 · ${elapsed} 秒`];
+    }
     if (job.stage === 'applied') {
       return [`已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落`, `繼續翻譯第 ${Math.min((job.completed || 0) + 1, job.total || 1)}/${job.total || 1} 批 · ${elapsed} 秒`];
     }
@@ -129,6 +138,7 @@ if (!globalThis.__translateWebContentReady) {
       .map((entry) => ({
       id: entry.id,
       text: entry.original,
+      viewport: isInViewport(entry.element),
       context: { type: entry.type, heading: entry.heading || undefined },
     }));
   }

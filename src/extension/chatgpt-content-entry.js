@@ -1,4 +1,8 @@
-import { buildTranslationPrompt, parseTranslationResponse } from './chatgpt-core.js';
+import {
+  buildTranslationPrompt,
+  parsePartialTranslationResponse,
+  parseTranslationResponse,
+} from './chatgpt-core.js';
 
 const COMPOSER_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], [contenteditable="true"][data-virtualkeyboard]';
 const ASSISTANT_SELECTOR = '[data-message-author-role="assistant"]';
@@ -32,22 +36,32 @@ function setComposerValue(composer, value) {
     }));
   } else {
     composer.replaceChildren();
-    const inserted = document.execCommand('insertText', false, value);
+    let inserted = false;
+    try {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.setData('text/plain', value);
+      const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, 'clipboardData', { value: dataTransfer });
+      composer.dispatchEvent(paste);
+      inserted = (composer.innerText || composer.textContent || '').includes(value);
+    } catch { /* fall through to insertText */ }
+    if (!inserted) inserted = document.execCommand('insertText', false, value);
     if (!inserted) {
       const paragraph = document.createElement('p');
       paragraph.textContent = value;
       composer.append(paragraph);
-      composer.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        composed: true,
-        inputType: 'insertText',
-        data: value,
-      }));
     }
+    composer.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      composed: true,
+      inputType: 'insertText',
+      data: value,
+    }));
+    composer.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
-async function waitForSendButton(composer, timeout = 5_000) {
+async function waitForSendButton(composer, timeout = 7_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const button = document.querySelector([
@@ -66,15 +80,20 @@ function assistantText(node) {
   return content?.innerText?.trim() ?? '';
 }
 
-async function submitAndWait(prompt, items) {
+async function submitAndWait(prompt, items, requestId) {
   const composer = document.querySelector(COMPOSER_SELECTOR);
   if (!composer) throw new Error('找不到 ChatGPT 輸入框，請確認已登入。');
   const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
   const beforeText = assistantText(beforeNodes.at(-1));
   setComposerValue(composer, prompt);
+  const written = composer.value ?? composer.innerText ?? composer.textContent ?? '';
+  if (!written.includes('INPUT_JSON=')) {
+    throw new Error('ChatGPT 輸入框未正確接收翻譯內容，尚未送出。');
+  }
   (await waitForSendButton(composer)).click();
 
   const deadline = Date.now() + 180_000;
+  const emittedIds = new Set();
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 700));
     const assistants = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
@@ -90,6 +109,14 @@ async function submitAndWait(prompt, items) {
       .find((value) => /(?:something went wrong|network error|發生錯誤|網路錯誤|error)/iu.test(value));
     if (pageError && !isNew) throw new Error(`ChatGPT 顯示錯誤：${pageError}`);
     if (!isNew || !text) continue;
+    const partial = parsePartialTranslationResponse(text, items)
+      .filter(({ id }) => !emittedIds.has(id));
+    if (partial.length && requestId) {
+      partial.forEach(({ id }) => emittedIds.add(id));
+      chrome.runtime.sendMessage({
+        type: 'PROVIDER_TRANSLATION_PARTIAL', requestId, translations: partial,
+      }).catch(() => {});
+    }
     if (!streaming) {
       try {
         return parseTranslationResponse(text, items);
@@ -99,7 +126,7 @@ async function submitAndWait(prompt, items) {
   throw new Error('等待 ChatGPT 回覆逾時（180 秒）。');
 }
 
-async function translate(items) {
+  async function translate(items, requestId) {
   if (busy) throw new Error('ChatGPT 分頁正在處理另一批翻譯。');
   if (!sessionStatus().ready) throw new Error('ChatGPT 尚未登入或輸入框未就緒。');
   busy = true;
@@ -107,9 +134,10 @@ async function translate(items) {
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }), items);
+        return await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }), items, requestId);
       } catch (error) {
         lastError = error;
+        if (/(?:傳送按鈕|尚未送出|輸入框)/u.test(error.message)) throw error;
       }
     }
     throw new Error(`ChatGPT 連續兩次未回傳有效翻譯：${lastError.message}`);
@@ -124,7 +152,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
   if (message?.type !== 'PROVIDER_TRANSLATE_BATCH') return false;
-  translate(message.items ?? [])
+  translate(message.items ?? [], message.requestId)
     .then((translations) => sendResponse({ ok: true, translations }))
     .catch((error) => sendResponse({ ok: false, error: error.message }));
   return true;

@@ -1,4 +1,8 @@
-import { buildM365TranslationPrompt, parseFirstValidTranslationResponse } from './chatgpt-core.js';
+import {
+  buildM365TranslationPrompt,
+  parseFirstValidTranslationResponse,
+  parsePartialTranslationResponse,
+} from './chatgpt-core.js';
 
 const COMPOSER_SELECTORS = [
   'textarea#userInput',
@@ -183,7 +187,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     return { candidates, translations, generating, copyActions: copyActionCount() };
   }
 
-  async function submitAndWait(prompt, items) {
+  async function submitAndWait(prompt, items, requestId) {
     const composer = findComposer();
     if (!composer) throw new Error('找不到 Microsoft 365 Copilot 輸入框，請確認已登入 Copilot Chat。');
     const before = responseState(items);
@@ -197,6 +201,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     let stableTranslation = '';
     let stableCount = 0;
     let generationSeen = false;
+    const emittedIds = new Set();
     while (Date.now() < deadline) {
       await sleep(800);
       if (location.pathname.toLowerCase().startsWith('/chat/blocked')) {
@@ -204,6 +209,15 @@ if (!globalThis.__translateWebM365ContentReady) {
       }
       const current = responseState(items, previousCandidates);
       generationSeen ||= current.generating;
+      const partial = current.candidates
+        .flatMap((candidate) => parsePartialTranslationResponse(candidate, items))
+        .filter(({ id }) => !emittedIds.has(id));
+      if (partial.length && requestId) {
+        partial.forEach(({ id }) => emittedIds.add(id));
+        chrome.runtime.sendMessage({
+          type: 'PROVIDER_TRANSLATION_PARTIAL', requestId, translations: partial,
+        }).catch(() => {});
+      }
       if (!current.translations) continue;
       const signature = JSON.stringify(current.translations);
       if (signature === stableTranslation) stableCount += 1;
@@ -217,7 +231,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     throw new Error('等待 Microsoft 365 Copilot 回覆逾時（180 秒）。');
   }
 
-  async function translate(items) {
+  async function translate(items, requestId) {
     if (busy) throw new Error('Microsoft 365 Copilot 分頁正在處理另一批翻譯。');
     const status = sessionStatus();
     if (!status.ready) throw new Error(status.message || 'Microsoft 365 Copilot 尚未登入或輸入框不可用。');
@@ -226,7 +240,7 @@ if (!globalThis.__translateWebM365ContentReady) {
       let lastError;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-          return await submitAndWait(buildM365TranslationPrompt(items, { retry: attempt > 0 }), items);
+          return await submitAndWait(buildM365TranslationPrompt(items, { retry: attempt > 0 }), items, requestId);
         } catch (error) {
           lastError = error;
         }
@@ -243,7 +257,7 @@ if (!globalThis.__translateWebM365ContentReady) {
       return false;
     }
     if (message?.type !== 'PROVIDER_TRANSLATE_BATCH') return false;
-    translate(message.items ?? [])
+    translate(message.items ?? [], message.requestId)
       .then((translations) => sendResponse({ ok: true, translations }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

@@ -144,6 +144,9 @@
       if (rect.bottom >= 0 && rect.top <= innerHeight) return Math.max(0, rect.top);
       if (rect.top > innerHeight) return innerHeight + rect.top;
       return innerHeight * 2 + Math.abs(rect.bottom);
+    }, isInViewport = function(element) {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth;
     }, progressElements = function() {
       let panel = document.querySelector('[data-twbt-ui="progress"]');
       if (panel) return {
@@ -193,6 +196,9 @@
       }
       if (job.stage === "collecting") return ["\u6B63\u5728\u5206\u6790\u7DB2\u9801\u5167\u5BB9\u2026", `\u5DF2\u7D93\u904E ${elapsed} \u79D2`];
       if (job.stage === "connecting") return [`\u6B63\u5728\u9023\u63A5 ${provider}\u2026`, `\u5DF2\u627E\u5230 ${job.blocks || 0} \u500B\u82F1\u6587\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
+      if (job.stage === "streaming") {
+        return ["\u53EF\u8996\u5340\u7FFB\u8B6F\u5DF2\u958B\u59CB\u986F\u793A", `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
+      }
       if (job.stage === "applied") {
         return [`\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`, `\u7E7C\u7E8C\u7FFB\u8B6F\u7B2C ${Math.min((job.completed || 0) + 1, job.total || 1)}/${job.total || 1} \u6279 \xB7 ${elapsed} \u79D2`];
       }
@@ -252,6 +258,7 @@
       return collectTranslationBlocks({ mode: scope }).map(register).sort((left, right) => viewportDistance(left.element) - viewportDistance(right.element)).map((entry) => ({
         id: entry.id,
         text: entry.original,
+        viewport: isInViewport(entry.element),
         context: { type: entry.type, heading: entry.heading || void 0 }
       }));
     }, ensurePresentation = function(entry) {
