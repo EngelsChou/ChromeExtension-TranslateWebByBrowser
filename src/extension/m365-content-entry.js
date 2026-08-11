@@ -198,7 +198,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     let stableCount = 0;
     let generationSeen = false;
     while (Date.now() < deadline) {
-      await sleep(1_200);
+      await sleep(800);
       if (location.pathname.toLowerCase().startsWith('/chat/blocked')) {
         throw new Error('Microsoft 365 Copilot Chat 已導向封鎖頁面；請確認帳戶授權與租用戶原則。');
       }

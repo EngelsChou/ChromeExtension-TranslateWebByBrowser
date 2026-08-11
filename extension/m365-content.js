@@ -258,7 +258,7 @@
       let stableCount = 0;
       let generationSeen = false;
       while (Date.now() < deadline) {
-        await sleep(1200);
+        await sleep(800);
         if (location.pathname.toLowerCase().startsWith("/chat/blocked")) {
           throw new Error("Microsoft 365 Copilot Chat \u5DF2\u5C0E\u5411\u5C01\u9396\u9801\u9762\uFF1B\u8ACB\u78BA\u8A8D\u5E33\u6236\u6388\u6B0A\u8207\u79DF\u7528\u6236\u539F\u5247\u3002");
         }

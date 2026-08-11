@@ -38,6 +38,12 @@ function showConnectionState(ready) {
   elements.connect.textContent = `開啟 ${selectedProvider().name} 登入`;
 }
 
+function progressPercent(job) {
+  if (job.state === 'complete') return 100;
+  if (!job.total) return 5;
+  return Math.max(5, Math.round(((job.completed || 0) / job.total) * 100));
+}
+
 async function checkStatus() {
   const provider = selectedProvider();
   setStatus('pending', `已選擇 ${provider.name}`, '只檢查既有分頁，不會自動開啟服務。');
@@ -65,7 +71,7 @@ chrome.runtime.onMessage.addListener((message) => {
     return;
   }
   elements.progress.hidden = false;
-  elements.progressBar.style.width = `${Math.round((message.completed / message.total) * 100)}%`;
+  elements.progressBar.style.width = `${progressPercent(message)}%`;
   if (message.state === 'error') {
     setStatus('error', '翻譯失敗', '錯誤已保存，可恢復已套用的段落。');
     showError(message.error);
@@ -143,7 +149,7 @@ async function initialize() {
   if (job?.provider === elements.provider.value) {
     if (job.state === 'running') {
       elements.progress.hidden = false;
-      elements.progressBar.style.width = `${Math.round((job.completed / job.total) * 100)}%`;
+      elements.progressBar.style.width = `${progressPercent(job)}%`;
       setStatus('pending', '翻譯仍在進行', `批次 ${job.completed}/${job.total}，已處理 ${job.translated}/${job.blocks} 個段落`);
     } else if (job.state === 'complete') {
       elements.progress.hidden = false;

@@ -42,7 +42,8 @@
     "dialog:not([open])",
     '[translate="no"]',
     ".notranslate",
-    "[data-twbt-translation]"
+    "[data-twbt-translation]",
+    "[data-twbt-ui]"
   ].join(",");
   var PAGE_CHROME_SELECTOR = [
     "nav",
@@ -138,7 +139,91 @@
 
   // src/extension/content-entry.js
   if (!globalThis.__translateWebContentReady) {
-    let register = function({ element, text, type, heading }) {
+    let viewportDistance = function(element) {
+      const rect = element.getBoundingClientRect();
+      if (rect.bottom >= 0 && rect.top <= innerHeight) return Math.max(0, rect.top);
+      if (rect.top > innerHeight) return innerHeight + rect.top;
+      return innerHeight * 2 + Math.abs(rect.bottom);
+    }, progressElements = function() {
+      let panel = document.querySelector('[data-twbt-ui="progress"]');
+      if (panel) return {
+        panel,
+        title: panel.querySelector("[data-twbt-progress-title]"),
+        detail: panel.querySelector("[data-twbt-progress-detail]"),
+        bar: panel.querySelector("[data-twbt-progress-bar]")
+      };
+      panel = document.createElement("section");
+      panel.dataset.twbtUi = "progress";
+      panel.setAttribute("role", "status");
+      panel.setAttribute("aria-live", "polite");
+      Object.assign(panel.style, {
+        position: "fixed",
+        right: "20px",
+        bottom: "20px",
+        zIndex: "2147483647",
+        boxSizing: "border-box",
+        width: "min(360px, calc(100vw - 32px))",
+        padding: "14px 16px",
+        border: "1px solid rgba(15, 23, 42, .16)",
+        borderRadius: "12px",
+        background: "#ffffff",
+        color: "#172033",
+        boxShadow: "0 12px 34px rgba(15, 23, 42, .22)",
+        font: '14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      });
+      panel.innerHTML = '<button type="button" data-twbt-progress-close aria-label="\u95DC\u9589\u7FFB\u8B6F\u9032\u5EA6" style="position:absolute;right:8px;top:7px;border:0;background:transparent;color:#64748b;font:20px/1 system-ui;cursor:pointer">\xD7</button><div data-twbt-progress-title style="padding-right:22px;font-weight:700"></div><div data-twbt-progress-detail style="margin-top:4px;color:#475569"></div><div style="height:5px;margin-top:11px;overflow:hidden;border-radius:999px;background:#e2e8f0"><div data-twbt-progress-bar style="height:100%;width:5%;border-radius:inherit;background:#2563eb;transition:width .25s ease"></div></div>';
+      panel.querySelector("[data-twbt-progress-close]").addEventListener("click", () => {
+        panel.hidden = true;
+        clearInterval(progressTimer);
+        progressTimer = null;
+      });
+      (document.body || document.documentElement).append(panel);
+      return {
+        panel,
+        title: panel.querySelector("[data-twbt-progress-title]"),
+        detail: panel.querySelector("[data-twbt-progress-detail]"),
+        bar: panel.querySelector("[data-twbt-progress-bar]")
+      };
+    }, progressCopy = function(job) {
+      const provider = job.providerName || (job.provider === "m365" ? "Microsoft 365 Copilot" : "ChatGPT");
+      const elapsed = job.startedAt ? Math.max(0, Math.floor((Date.now() - job.startedAt) / 1e3)) : 0;
+      if (job.state === "error") return ["\u7FFB\u8B6F\u5931\u6557", job.error || "\u8ACB\u7A0D\u5F8C\u518D\u8A66\u3002"];
+      if (job.state === "complete") {
+        return ["\u7FFB\u8B6F\u5B8C\u6210", job.message || `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`];
+      }
+      if (job.stage === "collecting") return ["\u6B63\u5728\u5206\u6790\u7DB2\u9801\u5167\u5BB9\u2026", `\u5DF2\u7D93\u904E ${elapsed} \u79D2`];
+      if (job.stage === "connecting") return [`\u6B63\u5728\u9023\u63A5 ${provider}\u2026`, `\u5DF2\u627E\u5230 ${job.blocks || 0} \u500B\u82F1\u6587\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
+      if (job.stage === "applied") {
+        return [`\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`, `\u7E7C\u7E8C\u7FFB\u8B6F\u7B2C ${Math.min((job.completed || 0) + 1, job.total || 1)}/${job.total || 1} \u6279 \xB7 ${elapsed} \u79D2`];
+      }
+      const first = !job.completed;
+      return [first ? "\u6B63\u5728\u7FFB\u8B6F\u7B2C\u4E00\u6279\u2026" : `\u6B63\u5728\u7FFB\u8B6F\u7B2C ${(job.completed || 0) + 1}/${job.total || 1} \u6279\u2026`, first ? `\u5B8C\u6210\u5F8C\u6703\u7ACB\u5373\u986F\u793A \xB7 ${elapsed} \u79D2` : `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
+    }, showProgress = function(job) {
+      currentProgress = job;
+      const { panel, title, detail, bar } = progressElements();
+      clearTimeout(hideProgressTimer);
+      panel.hidden = false;
+      const [titleText, detailText] = progressCopy(job);
+      title.textContent = titleText;
+      detail.textContent = detailText;
+      const percent = job.state === "complete" ? 100 : job.total > 0 ? Math.max(5, Math.round((job.completed || 0) / job.total * 100)) : 5;
+      bar.style.width = `${percent}%`;
+      bar.style.background = job.state === "error" ? "#dc2626" : job.state === "complete" ? "#16a34a" : "#2563eb";
+      clearInterval(progressTimer);
+      progressTimer = null;
+      if (job.state === "preparing" || job.state === "running") {
+        progressTimer = setInterval(() => {
+          if (!currentProgress || panel.hidden) return;
+          const copy = progressCopy(currentProgress);
+          title.textContent = copy[0];
+          detail.textContent = copy[1];
+        }, 1e3);
+      } else if (job.state === "complete") {
+        hideProgressTimer = setTimeout(() => {
+          panel.hidden = true;
+        }, 7e3);
+      }
+    }, register = function({ element, text, type, heading }) {
       const knownId = idsByBlock.get(element);
       if (knownId) return entriesById.get(knownId);
       let collision = 0;
@@ -164,7 +249,7 @@
       for (const [id, entry] of entriesById) {
         if (!entry.element.isConnected) entriesById.delete(id);
       }
-      return collectTranslationBlocks({ mode: scope }).map(register).map((entry) => ({
+      return collectTranslationBlocks({ mode: scope }).map(register).sort((left, right) => viewportDistance(left.element) - viewportDistance(right.element)).map((entry) => ({
         id: entry.id,
         text: entry.original,
         context: { type: entry.type, heading: entry.heading || void 0 }
@@ -205,6 +290,12 @@
       }
       return { applied, missing };
     }, restore = function() {
+      const panel = document.querySelector('[data-twbt-ui="progress"]');
+      if (panel) panel.hidden = true;
+      clearInterval(progressTimer);
+      clearTimeout(hideProgressTimer);
+      progressTimer = null;
+      currentProgress = null;
       let restored = 0;
       for (const entry of entriesById.values()) {
         if (!entry.element.isConnected || !entry.originalWrapper?.isConnected) continue;
@@ -223,8 +314,14 @@
     globalThis.__translateWebContentReady = true;
     const idsByBlock = /* @__PURE__ */ new WeakMap();
     const entriesById = /* @__PURE__ */ new Map();
+    let progressTimer = null;
+    let hideProgressTimer = null;
+    let currentProgress = null;
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-      if (message?.type === "PING_TRANSLATOR") sendResponse({ ready: true });
+      if (message?.type === "TRANSLATION_PROGRESS") {
+        showProgress(message);
+        sendResponse({ shown: true });
+      } else if (message?.type === "PING_TRANSLATOR") sendResponse({ ready: true });
       else if (message?.type === "COLLECT_TRANSLATION_BLOCKS") {
         const items = collect(message.scope);
         sendResponse({ items, blocks: items.length });

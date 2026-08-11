@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.4.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.5.0.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -25,6 +25,8 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
 
+Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The extension prioritizes blocks in the current viewport and applies every completed batch immediately, so the first translated content appears without waiting for the entire page.
+
 ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
 
 ## Block-level architecture
@@ -38,7 +40,9 @@ Current-page content script
   └─ emits only {id, text, context:{type, heading}}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ batches up to 30 blocks and about 6,000 characters
+  ├─ starts with up to 4 blocks / about 900 characters for a quick first result
+  ├─ continues with up to 24 blocks / about 5,000 characters per batch
+  ├─ displays elapsed progress on the page and applies each batch immediately
   ├─ retains progress and the last error across popup closure
   ├─ revalidates complete IDs/schema and applied counts
   └─ stops safely when page rerenders invalidate mappings
@@ -80,6 +84,7 @@ Web text is untrusted data; the prompt explicitly ignores embedded instructions.
 - Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and canvas content are not translated.
 - If an SPA replaces blocks during translation, the extension rejects mappings that can no longer be applied; restore and retry.
 - Very long individual blocks, provider usage limits, background throttling, or invalid JSON may time out; invalid batches are never applied.
+- Translation speed still depends on the selected provider, account capacity, network, and background-tab throttling. The on-page timer distinguishes provider waiting from a stalled extension.
 
 ## Development
 
@@ -91,4 +96,4 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.4.0.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.5.0.zip`.

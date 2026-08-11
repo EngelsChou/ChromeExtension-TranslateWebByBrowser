@@ -148,7 +148,7 @@
       }
       throw new Error("ChatGPT \u50B3\u9001\u6309\u9215\u5C1A\u672A\u53EF\u7528\u3002");
     }
-    async function submitAndWait(prompt) {
+    async function submitAndWait(prompt, items) {
       const composer = document.querySelector(COMPOSER_SELECTOR);
       if (!composer) throw new Error("\u627E\u4E0D\u5230 ChatGPT \u8F38\u5165\u6846\uFF0C\u8ACB\u78BA\u8A8D\u5DF2\u767B\u5165\u3002");
       const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
@@ -156,10 +156,8 @@
       setComposerValue(composer, prompt);
       (await waitForSendButton(composer)).click();
       const deadline = Date.now() + 18e4;
-      let stableText = "";
-      let stableCount = 0;
       while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await new Promise((resolve) => setTimeout(resolve, 700));
         const assistants = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
         const text = assistantText(assistants.at(-1));
         const streaming = Boolean(document.querySelector([
@@ -171,12 +169,12 @@
         const pageError = [...document.querySelectorAll('[role="alert"], [data-testid*="error" i]')].map((node) => node.textContent.trim()).find((value) => /(?:something went wrong|network error|發生錯誤|網路錯誤|error)/iu.test(value));
         if (pageError && !isNew) throw new Error(`ChatGPT \u986F\u793A\u932F\u8AA4\uFF1A${pageError}`);
         if (!isNew || !text) continue;
-        if (text === stableText) stableCount += 1;
-        else {
-          stableText = text;
-          stableCount = 1;
+        if (!streaming) {
+          try {
+            return parseTranslationResponse(text, items);
+          } catch {
+          }
         }
-        if (!streaming && stableCount >= 2) return text;
       }
       throw new Error("\u7B49\u5F85 ChatGPT \u56DE\u8986\u903E\u6642\uFF08180 \u79D2\uFF09\u3002");
     }
@@ -188,8 +186,7 @@
         let lastError;
         for (let attempt = 0; attempt < 2; attempt += 1) {
           try {
-            const response = await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }));
-            return parseTranslationResponse(response, items);
+            return await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }), items);
           } catch (error) {
             lastError = error;
           }

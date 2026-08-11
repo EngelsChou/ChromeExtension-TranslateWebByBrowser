@@ -66,7 +66,7 @@ function assistantText(node) {
   return content?.innerText?.trim() ?? '';
 }
 
-async function submitAndWait(prompt) {
+async function submitAndWait(prompt, items) {
   const composer = document.querySelector(COMPOSER_SELECTOR);
   if (!composer) throw new Error('找不到 ChatGPT 輸入框，請確認已登入。');
   const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
@@ -75,10 +75,8 @@ async function submitAndWait(prompt) {
   (await waitForSendButton(composer)).click();
 
   const deadline = Date.now() + 180_000;
-  let stableText = '';
-  let stableCount = 0;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    await new Promise((resolve) => setTimeout(resolve, 700));
     const assistants = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
     const text = assistantText(assistants.at(-1));
     const streaming = Boolean(document.querySelector([
@@ -92,12 +90,11 @@ async function submitAndWait(prompt) {
       .find((value) => /(?:something went wrong|network error|發生錯誤|網路錯誤|error)/iu.test(value));
     if (pageError && !isNew) throw new Error(`ChatGPT 顯示錯誤：${pageError}`);
     if (!isNew || !text) continue;
-    if (text === stableText) stableCount += 1;
-    else {
-      stableText = text;
-      stableCount = 1;
+    if (!streaming) {
+      try {
+        return parseTranslationResponse(text, items);
+      } catch { /* keep waiting until the response is complete and schema-valid */ }
     }
-    if (!streaming && stableCount >= 2) return text;
   }
   throw new Error('等待 ChatGPT 回覆逾時（180 秒）。');
 }
@@ -110,8 +107,7 @@ async function translate(items) {
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }));
-        return parseTranslationResponse(response, items);
+        return await submitAndWait(buildTranslationPrompt(items, { retry: attempt > 0 }), items);
       } catch (error) {
         lastError = error;
       }

@@ -15,3 +15,13 @@ test('batches by item and character limits without changing order', () => {
 test('returns no empty batches', () => {
   assert.deepEqual(createBatches([]), []);
 });
+
+test('uses a small first batch before larger throughput-oriented batches', () => {
+  const items = Array.from({ length: 12 }, (_, index) => ({
+    id: String(index + 1),
+    text: 'A'.repeat(150),
+  }));
+  const batches = createBatches(items);
+  assert.deepEqual(batches.map((batch) => batch.length), [4, 8]);
+  assert.deepEqual(batches.flat().map(({ id }) => id), items.map(({ id }) => id));
+});

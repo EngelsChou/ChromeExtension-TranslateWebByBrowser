@@ -11,7 +11,7 @@ export const BLOCK_SELECTOR = [
 const ALWAYS_EXCLUDED_SELECTOR = [
   '[contenteditable="true"]', '[contenteditable=""]', '[aria-hidden="true"]',
   '[hidden]', 'dialog:not([open])', '[translate="no"]', '.notranslate',
-  '[data-twbt-translation]',
+  '[data-twbt-translation]', '[data-twbt-ui]',
 ].join(',');
 
 const PAGE_CHROME_SELECTOR = [

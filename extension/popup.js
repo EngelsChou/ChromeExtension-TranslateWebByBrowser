@@ -59,6 +59,11 @@
     elements.connect.hidden = ready;
     elements.connect.textContent = `\u958B\u555F ${selectedProvider().name} \u767B\u5165`;
   }
+  function progressPercent(job) {
+    if (job.state === "complete") return 100;
+    if (!job.total) return 5;
+    return Math.max(5, Math.round((job.completed || 0) / job.total * 100));
+  }
   async function checkStatus() {
     const provider = selectedProvider();
     setStatus("pending", `\u5DF2\u9078\u64C7 ${provider.name}`, "\u53EA\u6AA2\u67E5\u65E2\u6709\u5206\u9801\uFF0C\u4E0D\u6703\u81EA\u52D5\u958B\u555F\u670D\u52D9\u3002");
@@ -85,7 +90,7 @@
       return;
     }
     elements.progress.hidden = false;
-    elements.progressBar.style.width = `${Math.round(message.completed / message.total * 100)}%`;
+    elements.progressBar.style.width = `${progressPercent(message)}%`;
     if (message.state === "error") {
       setStatus("error", "\u7FFB\u8B6F\u5931\u6557", "\u932F\u8AA4\u5DF2\u4FDD\u5B58\uFF0C\u53EF\u6062\u5FA9\u5DF2\u5957\u7528\u7684\u6BB5\u843D\u3002");
       showError(message.error);
@@ -159,7 +164,7 @@
     if (job?.provider === elements.provider.value) {
       if (job.state === "running") {
         elements.progress.hidden = false;
-        elements.progressBar.style.width = `${Math.round(job.completed / job.total * 100)}%`;
+        elements.progressBar.style.width = `${progressPercent(job)}%`;
         setStatus("pending", "\u7FFB\u8B6F\u4ECD\u5728\u9032\u884C", `\u6279\u6B21 ${job.completed}/${job.total}\uFF0C\u5DF2\u8655\u7406 ${job.translated}/${job.blocks} \u500B\u6BB5\u843D`);
       } else if (job.state === "complete") {
         elements.progress.hidden = false;

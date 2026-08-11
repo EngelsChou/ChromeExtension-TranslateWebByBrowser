@@ -107,23 +107,39 @@ async function openProvider(providerId) {
   return { provider: provider.id, providerName: provider.name, tabId: tab.id };
 }
 
-function updateJob(detail) {
+function updateJob(detail, targetTabId) {
   const job = { updatedAt: Date.now(), ...detail };
   chrome.storage.session.set({ translationJob: job }).catch(() => {});
   chrome.runtime.sendMessage({ type: 'TRANSLATION_PROGRESS', ...job }).catch(() => {});
+  if (targetTabId) {
+    chrome.tabs.sendMessage(targetTabId, { type: 'TRANSLATION_PROGRESS', ...job }).catch(() => {});
+  }
   return job;
 }
 
-async function translatePage(providerId, { scope = 'main', displayMode = 'bilingual' } = {}) {
+async function translatePage(providerId, { scope = 'main', displayMode = 'bilingual' } = {}, context = {}) {
   const provider = getProvider(providerId);
   const targetTab = await activeTargetTab();
+  context.targetTabId = targetTab.id;
+  context.startedAt = Date.now();
   await ensureTargetContentScript(targetTab.id);
+  updateJob({
+    state: 'preparing', stage: 'collecting', provider: provider.id, providerName: provider.name,
+    scope, displayMode, completed: 0, total: 0, translated: 0, blocks: 0,
+    startedAt: context.startedAt,
+  }, targetTab.id);
   const { items } = await chrome.tabs.sendMessage(targetTab.id, {
     type: 'COLLECT_TRANSLATION_BLOCKS',
     scope,
   });
+  context.blocks = items?.length ?? 0;
   if (!items?.length) return { translated: 0, total: 0, batches: 0, message: '找不到符合條件的英文主要內容。' };
 
+  updateJob({
+    state: 'preparing', stage: 'connecting', provider: provider.id, providerName: provider.name,
+    scope, displayMode, completed: 0, total: 0, translated: 0, blocks: items.length,
+    startedAt: context.startedAt,
+  }, targetTab.id);
   const { tab: providerTab, status } = await findOrCreateProviderTab(provider);
   if (!status.ready) {
     await chrome.tabs.update(providerTab.id, { active: true });
@@ -133,13 +149,16 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
 
   const batches = createBatches(items);
   let translated = 0;
-  updateJob({
-    state: 'running', provider: provider.id, scope, displayMode,
-    completed: 0, total: batches.length, translated, blocks: items.length,
-  });
+  context.total = batches.length;
+  context.translated = translated;
 
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index];
+    updateJob({
+      state: 'running', stage: 'waiting', provider: provider.id, providerName: provider.name,
+      scope, displayMode, completed: index, total: batches.length, translated, blocks: items.length,
+      startedAt: context.startedAt,
+    }, targetTab.id);
     const result = await chrome.tabs.sendMessage(providerTab.id, {
       type: 'PROVIDER_TRANSLATE_BATCH',
       items: batch,
@@ -155,10 +174,13 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
       throw new Error(`原網頁在翻譯期間已重繪，${translations.length - applyResult.applied} 個段落無法安全套用。請恢復後重試。`);
     }
     translated += applyResult.applied;
+    context.translated = translated;
     updateJob({
-      state: 'running', provider: provider.id, scope, displayMode,
+      state: 'running', stage: 'applied', provider: provider.id, providerName: provider.name,
+      scope, displayMode,
       completed: index + 1, total: batches.length, translated, blocks: items.length,
-    });
+      startedAt: context.startedAt,
+    }, targetTab.id);
   }
 
   return { translated, total: items.length, batches: batches.length };
@@ -172,17 +194,25 @@ async function restorePage(providerId) {
 }
 
 function enqueueTranslation(providerId, options) {
+  const context = {};
   const execute = async () => {
     try {
-      const result = await translatePage(providerId, options);
+      const result = await translatePage(providerId, options, context);
       updateJob({
-        state: 'complete', provider: providerId, ...options,
+        state: 'complete', stage: 'complete', provider: providerId,
+        providerName: getProvider(providerId).name, ...options,
         completed: result.batches, total: result.batches,
         translated: result.translated, blocks: result.total,
-      });
+        message: result.message, startedAt: context.startedAt,
+      }, context.targetTabId);
       return result;
     } catch (error) {
-      updateJob({ state: 'error', provider: providerId, ...options, error: error.message });
+      updateJob({
+        state: 'error', stage: 'error', provider: providerId,
+        providerName: getProvider(providerId).name, ...options, error: error.message,
+        completed: 0, total: context.total ?? 0, translated: context.translated ?? 0,
+        blocks: context.blocks ?? 0, startedAt: context.startedAt,
+      }, context.targetTabId);
       throw error;
     }
   };

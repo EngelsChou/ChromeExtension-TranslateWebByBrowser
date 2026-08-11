@@ -1,12 +1,19 @@
 (() => {
   // src/extension/batching.js
-  function createBatches(items, { maxItems = 30, maxCharacters = 6e3 } = {}) {
+  function createBatches(items, {
+    maxItems = 24,
+    maxCharacters = 5e3,
+    firstMaxItems = Math.min(4, maxItems),
+    firstMaxCharacters = Math.min(900, maxCharacters)
+  } = {}) {
     const batches = [];
     let batch = [];
     let characters = 0;
     for (const item of items) {
       const size = item.text.length;
-      if (batch.length && (batch.length >= maxItems || characters + size > maxCharacters)) {
+      const itemLimit = batches.length === 0 ? firstMaxItems : maxItems;
+      const characterLimit = batches.length === 0 ? firstMaxCharacters : maxCharacters;
+      if (batch.length && (batch.length >= itemLimit || characters + size > characterLimit)) {
         batches.push(batch);
         batch = [];
         characters = 0;
@@ -164,23 +171,56 @@
     await chrome.windows.update(tab.windowId, { focused: true });
     return { provider: provider.id, providerName: provider.name, tabId: tab.id };
   }
-  function updateJob(detail) {
+  function updateJob(detail, targetTabId) {
     const job = { updatedAt: Date.now(), ...detail };
     chrome.storage.session.set({ translationJob: job }).catch(() => {
     });
     chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", ...job }).catch(() => {
     });
+    if (targetTabId) {
+      chrome.tabs.sendMessage(targetTabId, { type: "TRANSLATION_PROGRESS", ...job }).catch(() => {
+      });
+    }
     return job;
   }
-  async function translatePage(providerId, { scope = "main", displayMode = "bilingual" } = {}) {
+  async function translatePage(providerId, { scope = "main", displayMode = "bilingual" } = {}, context = {}) {
     const provider = getProvider(providerId);
     const targetTab = await activeTargetTab();
+    context.targetTabId = targetTab.id;
+    context.startedAt = Date.now();
     await ensureTargetContentScript(targetTab.id);
+    updateJob({
+      state: "preparing",
+      stage: "collecting",
+      provider: provider.id,
+      providerName: provider.name,
+      scope,
+      displayMode,
+      completed: 0,
+      total: 0,
+      translated: 0,
+      blocks: 0,
+      startedAt: context.startedAt
+    }, targetTab.id);
     const { items } = await chrome.tabs.sendMessage(targetTab.id, {
       type: "COLLECT_TRANSLATION_BLOCKS",
       scope
     });
+    context.blocks = items?.length ?? 0;
     if (!items?.length) return { translated: 0, total: 0, batches: 0, message: "\u627E\u4E0D\u5230\u7B26\u5408\u689D\u4EF6\u7684\u82F1\u6587\u4E3B\u8981\u5167\u5BB9\u3002" };
+    updateJob({
+      state: "preparing",
+      stage: "connecting",
+      provider: provider.id,
+      providerName: provider.name,
+      scope,
+      displayMode,
+      completed: 0,
+      total: 0,
+      translated: 0,
+      blocks: items.length,
+      startedAt: context.startedAt
+    }, targetTab.id);
     const { tab: providerTab, status } = await findOrCreateProviderTab(provider);
     if (!status.ready) {
       await chrome.tabs.update(providerTab.id, { active: true });
@@ -189,18 +229,23 @@
     }
     const batches = createBatches(items);
     let translated = 0;
-    updateJob({
-      state: "running",
-      provider: provider.id,
-      scope,
-      displayMode,
-      completed: 0,
-      total: batches.length,
-      translated,
-      blocks: items.length
-    });
+    context.total = batches.length;
+    context.translated = translated;
     for (let index = 0; index < batches.length; index += 1) {
       const batch = batches[index];
+      updateJob({
+        state: "running",
+        stage: "waiting",
+        provider: provider.id,
+        providerName: provider.name,
+        scope,
+        displayMode,
+        completed: index,
+        total: batches.length,
+        translated,
+        blocks: items.length,
+        startedAt: context.startedAt
+      }, targetTab.id);
       const result = await chrome.tabs.sendMessage(providerTab.id, {
         type: "PROVIDER_TRANSLATE_BATCH",
         items: batch
@@ -216,16 +261,20 @@
         throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${translations.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002\u8ACB\u6062\u5FA9\u5F8C\u91CD\u8A66\u3002`);
       }
       translated += applyResult.applied;
+      context.translated = translated;
       updateJob({
         state: "running",
+        stage: "applied",
         provider: provider.id,
+        providerName: provider.name,
         scope,
         displayMode,
         completed: index + 1,
         total: batches.length,
         translated,
-        blocks: items.length
-      });
+        blocks: items.length,
+        startedAt: context.startedAt
+      }, targetTab.id);
     }
     return { translated, total: items.length, batches: batches.length };
   }
@@ -236,21 +285,38 @@
     return chrome.tabs.sendMessage(tab.id, { type: "RESTORE_TEXT_NODES" });
   }
   function enqueueTranslation(providerId, options) {
+    const context = {};
     const execute = async () => {
       try {
-        const result = await translatePage(providerId, options);
+        const result = await translatePage(providerId, options, context);
         updateJob({
           state: "complete",
+          stage: "complete",
           provider: providerId,
+          providerName: getProvider(providerId).name,
           ...options,
           completed: result.batches,
           total: result.batches,
           translated: result.translated,
-          blocks: result.total
-        });
+          blocks: result.total,
+          message: result.message,
+          startedAt: context.startedAt
+        }, context.targetTabId);
         return result;
       } catch (error) {
-        updateJob({ state: "error", provider: providerId, ...options, error: error.message });
+        updateJob({
+          state: "error",
+          stage: "error",
+          provider: providerId,
+          providerName: getProvider(providerId).name,
+          ...options,
+          error: error.message,
+          completed: 0,
+          total: context.total ?? 0,
+          translated: context.translated ?? 0,
+          blocks: context.blocks ?? 0,
+          startedAt: context.startedAt
+        }, context.targetTabId);
         throw error;
       }
     };

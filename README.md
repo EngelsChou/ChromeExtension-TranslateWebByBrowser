@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.4.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.5.0.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -38,7 +38,9 @@ ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsof
   └─ 只輸出 {id, text, context:{type, heading}}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ 每批最多 30 段、約 6,000 字元
+  ├─ 第一批最多 4 段、約 900 字元，優先快速顯示
+  ├─ 後續每批最多 24 段、約 5,000 字元
+  ├─ 在原網頁顯示經過時間，完成一批就立即套用
   ├─ 保存進度與最後錯誤，popup 關閉後仍可查詢
   ├─ 再次驗證完整 ID/schema 與實際套用數量
   └─ 網頁重繪造成 mapping 失效時安全停止
@@ -91,4 +93,11 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.4.0.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.5.0.zip`。
+
+## 翻譯速度與進度
+
+- popup 關閉後，原網頁右下角仍會顯示目前階段、已經過秒數、批次與已套用段落數。
+- 目前視窗內的內容會優先進入第一批；第一批完成後立即顯示，不必等整頁翻完。
+- ChatGPT 與 M365 都會在第一個完整且通過 ID/schema 驗證的 JSON 出現後立即套用。
+- 實際等待時間仍取決於 provider、帳號負載、網路與 Chrome 背景分頁節流；網頁上的計時可用來區分「provider 尚在回覆」與 Extension 沒有運作。
