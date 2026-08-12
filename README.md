@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.7.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.7.1.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -52,6 +52,7 @@ Provider content script
   ├─ 操作已登入的 ChatGPT / M365 composer
   ├─ 依 ChatGPT／M365 調整提示語氣，並嚴格要求單一 JSON object
   ├─ 逐一驗證 JSON 候選，不會誤用 prompt 範例或建議按鈕
+  ├─ M365 的巢狀／重複 DOM 回覆候選會先依 ID 去重再串流
   ├─ 收到原網頁套用確認後，才把該段落標記為已傳送
   └─ M365 參考 ask-bridge：使用 Stop、Copy action、新回覆與穩定度判斷完成
 ```
@@ -97,7 +98,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.7.0.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.7.1.zip`。
 
 ## 翻譯速度與進度
 
@@ -120,7 +121,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.7.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.7.1.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -170,6 +171,7 @@ Provider content script
   ├─ operates the signed-in ChatGPT / M365 composer
   ├─ adapts prompt wording for ChatGPT / M365 and requires one strict JSON object
   ├─ validates every JSON candidate, ignoring prompt examples and suggestions
+  ├─ deduplicates nested/repeated M365 DOM candidates by ID before streaming
   ├─ marks a paragraph sent only after the source page confirms it was applied
   └─ follows ask-bridge's M365 Stop, Copy-action, new-response, and stability signals
 ```
@@ -217,4 +219,4 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.0.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.1.zip`.

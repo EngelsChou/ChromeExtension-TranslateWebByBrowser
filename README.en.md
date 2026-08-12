@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.7.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.7.1.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -56,6 +56,7 @@ Provider content script
   ├─ operates the signed-in ChatGPT / M365 composer
   ├─ adapts prompt wording for ChatGPT / M365 and requires one strict JSON object
   ├─ validates every JSON candidate, ignoring prompt examples and suggestions
+  ├─ deduplicates nested/repeated M365 DOM candidates by ID before streaming
   ├─ marks a paragraph sent only after the source page confirms it was applied
   └─ follows ask-bridge's M365 Stop, Copy-action, new-response, and stability signals
 ```
@@ -103,4 +104,4 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.0.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.1.zip`.

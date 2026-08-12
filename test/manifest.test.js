@@ -80,8 +80,13 @@ test('providers accept the first complete schema-valid response without an extra
 test('both providers stream validated paragraph objects back to the source page', () => {
   assert.match(backgroundSource, /PROVIDER_TRANSLATION_PARTIAL/u);
   assert.match(chatgptSource, /parsePartialTranslationResponse/u);
-  assert.match(m365Source, /parsePartialTranslationResponse/u);
+  assert.match(m365Source, /mergePartialTranslationCandidates/u);
   assert.match(contentSource, /可視區翻譯已開始顯示/u);
+});
+
+test('M365 deduplicates nested DOM response candidates before streaming', () => {
+  assert.match(m365Source, /mergePartialTranslationCandidates\(current\.candidates, items\)/u);
+  assert.doesNotMatch(m365Source, /current\.candidates\s*\.flatMap/u);
 });
 
 test('each streamed provider result waits for source-page acknowledgement', () => {

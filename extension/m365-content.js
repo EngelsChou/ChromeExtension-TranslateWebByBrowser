@@ -96,6 +96,18 @@
     }
     return translations;
   }
+  function mergePartialTranslationCandidates(rawCandidates, expectedItems) {
+    const merged = [];
+    const seen = /* @__PURE__ */ new Map();
+    for (const candidate of rawCandidates) {
+      for (const translation of parsePartialTranslationResponse(candidate, expectedItems)) {
+        if (seen.get(translation.id) === translation.text) continue;
+        if (!seen.has(translation.id)) seen.set(translation.id, translation.text);
+        merged.push(translation);
+      }
+    }
+    return merged;
+  }
   function validateTranslations(payload, expectedItems) {
     if (!Array.isArray(payload)) throw new Error("\u7FFB\u8B6F\u8CC7\u6599\u5FC5\u9808\u662F\u9663\u5217\u3002");
     const expectedIds = new Set(expectedItems.map((item) => item.id));
@@ -286,7 +298,7 @@
         }
         const current = responseState(items, previousCandidates);
         generationSeen ||= current.generating;
-        const partial = current.candidates.flatMap((candidate) => parsePartialTranslationResponse(candidate, items)).filter(({ id }) => !emittedIds.has(id));
+        const partial = mergePartialTranslationCandidates(current.candidates, items).filter(({ id }) => !emittedIds.has(id));
         if (partial.length && requestId) {
           const acknowledgement = await chrome.runtime.sendMessage({
             type: "PROVIDER_TRANSLATION_PARTIAL",

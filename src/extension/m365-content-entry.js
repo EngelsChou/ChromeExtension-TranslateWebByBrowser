@@ -1,7 +1,7 @@
 import {
   buildM365TranslationPrompt,
+  mergePartialTranslationCandidates,
   parseFirstValidTranslationResponse,
-  parsePartialTranslationResponse,
 } from './chatgpt-core.js';
 
 const COMPOSER_SELECTORS = [
@@ -209,8 +209,7 @@ if (!globalThis.__translateWebM365ContentReady) {
       }
       const current = responseState(items, previousCandidates);
       generationSeen ||= current.generating;
-      const partial = current.candidates
-        .flatMap((candidate) => parsePartialTranslationResponse(candidate, items))
+      const partial = mergePartialTranslationCandidates(current.candidates, items)
         .filter(({ id }) => !emittedIds.has(id));
       if (partial.length && requestId) {
         const acknowledgement = await chrome.runtime.sendMessage({

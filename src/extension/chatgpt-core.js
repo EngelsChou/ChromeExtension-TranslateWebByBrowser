@@ -110,6 +110,19 @@ export function parsePartialTranslationResponse(raw, expectedItems) {
   return translations;
 }
 
+export function mergePartialTranslationCandidates(rawCandidates, expectedItems) {
+  const merged = [];
+  const seen = new Map();
+  for (const candidate of rawCandidates) {
+    for (const translation of parsePartialTranslationResponse(candidate, expectedItems)) {
+      if (seen.get(translation.id) === translation.text) continue;
+      if (!seen.has(translation.id)) seen.set(translation.id, translation.text);
+      merged.push(translation);
+    }
+  }
+  return merged;
+}
+
 export function validateTranslations(payload, expectedItems) {
   if (!Array.isArray(payload)) throw new Error('翻譯資料必須是陣列。');
   const expectedIds = new Set(expectedItems.map((item) => item.id));

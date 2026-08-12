@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  mergePartialTranslationCandidates,
   parseFirstValidTranslationResponse,
   parsePartialTranslationResponse,
   parseTranslationResponse,
@@ -72,4 +73,23 @@ test('partial stream parsing ignores schema examples and untranslated echoes', (
   const streaming = '{"id":"same-id","text":"translated text"}\n'
     + '{"id":"tn-long","text":"This paragraph contains enough English words for validation."}';
   assert.deepEqual(parsePartialTranslationResponse(streaming, longExpected), []);
+});
+
+test('deduplicates the same partial translation exposed by nested M365 DOM candidates', () => {
+  const response = '{"translations":[{"id":"tn-one","text":"哈囉"},{"id":"tn-two","text":"世界"}]}';
+  assert.deepEqual(mergePartialTranslationCandidates([
+    response,
+    `Copilot said:\n${response}`,
+  ], expected), [
+    { id: 'tn-one', text: '哈囉' },
+    { id: 'tn-two', text: '世界' },
+  ]);
+});
+
+test('does not hide conflicting translations for the same M365 partial ID', () => {
+  const merged = mergePartialTranslationCandidates([
+    '{"translations":[{"id":"tn-one","text":"哈囉"}]}',
+    '{"translations":[{"id":"tn-one","text":"您好"}]}',
+  ], expected);
+  assert.throws(() => validateTranslations(merged, [{ id: 'tn-one', text: 'Hello' }]), /重複/u);
 });
