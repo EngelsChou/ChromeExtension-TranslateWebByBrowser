@@ -9,6 +9,8 @@ test('detects English prose and rejects non-English or unsafe noise', () => {
   assert.equal(shouldTranslateText('Translate this visible sentence.'), true);
   assert.equal(shouldTranslateText('  Account settings  '), true);
   assert.equal(shouldTranslateText('繁體中文內容'), false);
+  assert.equal(shouldTranslateText('.NET 簡介'), false);
+  assert.equal(shouldTranslateText('Download .NET 下載'), false);
   assert.equal(shouldTranslateText('https://example.com/path'), false);
   assert.equal(shouldTranslateText('42'), false);
 });

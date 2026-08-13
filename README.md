@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.7.1.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.0.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -20,7 +20,7 @@
 2. 選擇 `ChatGPT` 或 `Microsoft 365 Copilot`。開啟 popup 或切換選項不會自動開啟任何 provider。
 3. 選擇翻譯範圍：
    - **主要內容（建議）**：辨識 `main`、`article`、`[role=main]`，排除導覽列、頁尾與側欄。
-   - **整個頁面**：翻譯所有可辨識的已渲染段落，包括導覽區域。
+   - **整頁可見文字（含選單）**：翻譯所有可辨識段落，並加入當下視窗可見、且不含漢字的英文 Text Nodes，例如導覽列、側欄、功能選單、按鈕與連結。
 4. 選擇 **雙語對照** 或 **只顯示翻譯**。
 5. 第一次使用時，確認 provider 後按登入按鈕，親自完成登入、MFA 或組織驗證。
 6. 回到原網頁，按「翻譯目前頁面」。按「恢復原文」可完整移除翻譯並還原原始節點。
@@ -35,6 +35,8 @@ ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsof
 目前網頁 content script
   ├─ 尋找主要內容或整頁範圍
   ├─ 擷取 h1-h6 / p / li / td / blockquote 等已渲染段落
+  ├─ 整頁模式另外擷取 viewport 內可見的英文選單／控制項 Text Nodes
+  ├─ 排除已由段落涵蓋的 Text Nodes，避免同一文字重複送出
   ├─ 包含 viewport 外的文章內容，不只翻譯目前畫面
   ├─ 產生穩定 block ID，保存原始 DOM children
   └─ 只輸出 {id, text, context:{type, heading}}
@@ -61,7 +63,7 @@ Provider content script
 
 ## 傳送內容與隱私
 
-Extension **不傳送整頁 HTML 或 DOM 結構**。每個段落只傳送：
+Extension **不傳送整頁 HTML 或 DOM 結構**。每個段落或可見介面文字只傳送：
 
 - 穩定隨機式 ID
 - 純文字
@@ -98,7 +100,14 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.7.1.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.0.zip`。
+
+## YouTube 字幕與文字記錄
+
+- 在有字幕的 YouTube 影片開啟「顯示文字記錄」，再選擇「整頁可見文字（含選單）」；Extension 可翻譯當下視窗中可見的文字記錄行、按鈕與功能選單。捲動文字記錄後可再次翻譯新出現的行。
+- 目前不提供播放器上的即時逐句 AI 字幕。ChatGPT／M365 網頁 UI 通常需要數秒至數十秒才回覆，字幕可能已切換，無法可靠同步。
+- YouTube 官方字幕下載 API 需要 OAuth；下載字幕還要求帳戶具備影片編輯權限，因此本專案不會加入 API key、讀取登入 token 或繞過權限。
+- 參考：[YouTube 顯示影片文字記錄說明](https://support.google.com/youtube/answer/15930243?hl=zh-Hant)、[YouTube Captions API](https://developers.google.com/youtube/v3/docs/captions/download)。
 
 ## 翻譯速度與進度
 
@@ -121,7 +130,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.7.1.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.0.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -135,7 +144,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 2. Choose `ChatGPT` or `Microsoft 365 Copilot`. Opening the popup or changing this selection never opens a provider automatically.
 3. Choose a scope:
    - **Main content (recommended)**: identifies `main`, `article`, or `[role=main]` and excludes navigation, footers, and sidebars.
-   - **Whole page**: translates every recognizable rendered block, including navigation areas.
+   - **Visible whole page (including menus)**: translates recognizable blocks plus visible English text nodes without Han characters in navigation, sidebars, menus, buttons, and links.
 4. Choose **Bilingual** or **Translation only**.
 5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
@@ -154,6 +163,8 @@ During translation, the extension runs ChatGPT or M365 in a dedicated provider w
 Current-page content script
   ├─ selects main-content or whole-page scope
   ├─ collects rendered h1-h6 / p / li / td / blockquote blocks
+  ├─ in whole-page mode, also collects visible viewport English menu/control text nodes
+  ├─ excludes text nodes already covered by a block to prevent duplicate requests
   ├─ includes article content outside the current viewport
   ├─ creates stable block IDs and retains original DOM children
   └─ emits only {id, text, context:{type, heading}}
@@ -180,7 +191,7 @@ Bilingual mode preserves original links, formatting, and event nodes while inser
 
 ## Transmitted data and privacy
 
-The extension **never sends the full HTML or DOM structure**. Each block sends only:
+The extension **never sends the full HTML or DOM structure**. Each block or visible UI text sends only:
 
 - a stable opaque ID
 - plain text
@@ -219,4 +230,11 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.7.1.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.0.zip`.
+
+## YouTube captions and transcripts
+
+- For a captioned YouTube video, open **Show transcript**, then select **Visible whole page (including menus)**. The extension translates transcript rows, buttons, and menus currently visible in the viewport. Scroll the transcript and translate again for newly visible rows.
+- Live per-line AI captions over the player are not currently supported. ChatGPT/M365 web UIs can take several to tens of seconds to respond, by which time the player caption may have changed.
+- YouTube's official caption download API requires OAuth, and downloading requires permission to edit the video. This project will not add API keys, read login tokens, or bypass those permissions.
+- References: [YouTube: View video transcripts](https://support.google.com/youtube/answer/15930243?hl=en), [YouTube Captions API](https://developers.google.com/youtube/v3/docs/captions/download).

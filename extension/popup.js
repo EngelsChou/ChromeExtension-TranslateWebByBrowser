@@ -124,7 +124,7 @@
     elements.displayMode.disabled = true;
     elements.progress.hidden = false;
     elements.progressBar.style.width = "0%";
-    setStatus("pending", "\u6E96\u5099\u7FFB\u8B6F\u2026", elements.scope.value === "main" ? "\u6B63\u5728\u8FA8\u8B58\u4E3B\u8981\u5167\u5BB9\u8207\u6BB5\u843D" : "\u6B63\u5728\u6383\u63CF\u6574\u500B\u9801\u9762\u7684\u6BB5\u843D");
+    setStatus("pending", "\u6E96\u5099\u7FFB\u8B6F\u2026", elements.scope.value === "main" ? "\u6B63\u5728\u8FA8\u8B58\u4E3B\u8981\u5167\u5BB9\u8207\u6BB5\u843D" : "\u6B63\u5728\u6383\u63CF\u6BB5\u843D\u8207\u7576\u4E0B\u8996\u7A97\u53EF\u898B\u7684\u529F\u80FD\u9078\u55AE");
     const result = await chrome.runtime.sendMessage({
       type: "TRANSLATE_PAGE",
       provider: elements.provider.value,

@@ -109,7 +109,9 @@ elements.translate.addEventListener('click', async () => {
   elements.displayMode.disabled = true;
   elements.progress.hidden = false;
   elements.progressBar.style.width = '0%';
-  setStatus('pending', '準備翻譯…', elements.scope.value === 'main' ? '正在辨識主要內容與段落' : '正在掃描整個頁面的段落');
+  setStatus('pending', '準備翻譯…', elements.scope.value === 'main'
+    ? '正在辨識主要內容與段落'
+    : '正在掃描段落與當下視窗可見的功能選單');
   const result = await chrome.runtime.sendMessage({
     type: 'TRANSLATE_PAGE',
     provider: elements.provider.value,

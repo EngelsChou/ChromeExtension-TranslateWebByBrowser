@@ -32,6 +32,7 @@ export function shouldTranslateText(value) {
   const core = normalizeBlockText(value);
   if (core.length < 2 || core.length > 6000) return false;
   if (!/[A-Za-z]/u.test(core) || !/[A-Za-z]{2,}/u.test(core)) return false;
+  if (/\p{Script=Han}/u.test(core)) return false;
   if (/^(https?:\/\/|www\.|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/iu.test(core)) return false;
 
   const letters = core.match(/\p{L}/gu) ?? [];

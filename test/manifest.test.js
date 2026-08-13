@@ -8,6 +8,7 @@ const backgroundSource = await readFile(new URL('../src/extension/background.js'
 const contentSource = await readFile(new URL('../src/extension/content-entry.js', import.meta.url), 'utf8');
 const chatgptSource = await readFile(new URL('../src/extension/chatgpt-content-entry.js', import.meta.url), 'utf8');
 const m365Source = await readFile(new URL('../src/extension/m365-content-entry.js', import.meta.url), 'utf8');
+const popupHtml = await readFile(new URL('../extension/popup.html', import.meta.url), 'utf8');
 
 test('ships a self-contained Manifest V3 provider-tab extension', () => {
   assert.equal(manifest.manifest_version, 3);
@@ -55,6 +56,14 @@ test('translation uses paragraph blocks and verifies every applied result', () =
   assert.match(backgroundSource, /COLLECT_TRANSLATION_BLOCKS/u);
   assert.match(backgroundSource, /applyResult\.applied !== (?:translations|remaining)\.length/u);
   assert.doesNotMatch(backgroundSource, /COLLECT_TEXT_NODES/u);
+});
+
+test('whole-page mode includes visible English text nodes from menus and controls', () => {
+  assert.match(contentSource, /collectVisibleEnglishTextNodes/u);
+  assert.match(contentSource, /scope === 'page'/u);
+  assert.match(contentSource, /kind: 'text'/u);
+  assert.match(contentSource, /entry\.node\.replaceWith\(originalWrapper\)/u);
+  assert.match(popupHtml, /整頁可見文字（含選單）/u);
 });
 
 test('M365 waits for schema-valid candidates and response completion markers', () => {

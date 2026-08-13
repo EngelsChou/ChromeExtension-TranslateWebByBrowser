@@ -62,6 +62,7 @@
     const core = normalizeBlockText(value);
     if (core.length < 2 || core.length > 6e3) return false;
     if (!/[A-Za-z]/u.test(core) || !/[A-Za-z]{2,}/u.test(core)) return false;
+    if (new RegExp("\\p{Script=Han}", "u").test(core)) return false;
     if (/^(https?:\/\/|www\.|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/iu.test(core)) return false;
     const letters = core.match(new RegExp("\\p{L}", "gu")) ?? [];
     const latin = core.match(new RegExp("\\p{Script=Latin}", "gu")) ?? [];
@@ -78,6 +79,15 @@
     const style = getComputedStyle(element);
     if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0) return false;
     return Boolean(element.getClientRects().length);
+  }
+  function isTextNodeVisible(node) {
+    const element = node.parentElement;
+    if (!isEligibleElement(element, { includePageChrome: true }) || !isElementRendered(element)) return false;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const visible = [...range.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0 && rect.bottom >= 0 && rect.right >= 0 && rect.top <= innerHeight && rect.left <= innerWidth);
+    range.detach();
+    return visible;
   }
   function fnv1a(value) {
     let hash = 2166136261;
@@ -97,6 +107,10 @@
       current = parent;
     }
     return parts.reverse().join(".");
+  }
+  function makeStableId(node, original, collision = 0) {
+    const seed = `${location.origin}${location.pathname}|${nodePath(node)}|${original}`;
+    return `tn-${fnv1a(seed)}${collision ? `-${collision}` : ""}`;
   }
   function makeStableBlockId(element, original, collision = 0) {
     const seed = `${location.origin}${location.pathname}|${nodePath(element)}|${original}`;
@@ -135,6 +149,17 @@
       blocks.push({ element, text, type, heading });
     }
     return blocks;
+  }
+  function collectVisibleEnglishTextNodes(root = document.body) {
+    if (!root) return [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        return shouldTranslateText(node.data) && isTextNodeVisible(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    return nodes;
   }
 
   // src/extension/content-entry.js
@@ -229,7 +254,7 @@
           panel.hidden = true;
         }, 7e3);
       }
-    }, register = function({ element, text, type, heading }) {
+    }, registerBlock = function({ element, text, type, heading }) {
       const knownId = idsByBlock.get(element);
       if (knownId) return entriesById.get(knownId);
       let collision = 0;
@@ -240,6 +265,7 @@
       }
       const entry = {
         id,
+        kind: "block",
         element,
         original: text,
         type,
@@ -251,11 +277,39 @@
       idsByBlock.set(element, id);
       entriesById.set(id, entry);
       return entry;
+    }, registerTextNode = function(node) {
+      const knownId = idsByTextNode.get(node);
+      if (knownId) return entriesById.get(knownId);
+      const text = normalizeBlockText(node.data);
+      let collision = 0;
+      let id = makeStableId(node, text, collision);
+      while (entriesById.has(id) && entriesById.get(id).node !== node) {
+        collision += 1;
+        id = makeStableId(node, text, collision);
+      }
+      const entry = {
+        id,
+        kind: "text",
+        node,
+        element: node.parentElement,
+        original: text,
+        type: node.parentElement?.tagName.toLowerCase() || "text",
+        heading: "",
+        originalWrapper: null,
+        translationElement: null,
+        translation: null
+      };
+      idsByTextNode.set(node, id);
+      entriesById.set(id, entry);
+      return entry;
     }, collect = function(scope = "main") {
       for (const [id, entry] of entriesById) {
         if (!entry.element.isConnected) entriesById.delete(id);
       }
-      return collectTranslationBlocks({ mode: scope }).map(register).sort((left, right) => viewportDistance(left.element) - viewportDistance(right.element)).map((entry) => ({
+      const blockEntries = collectTranslationBlocks({ mode: scope }).map(registerBlock);
+      const selectedBlocks = new WeakSet(blockEntries.map(({ element }) => element));
+      const textEntries = scope === "page" ? collectVisibleEnglishTextNodes().filter((node) => !selectedBlocks.has(node.parentElement?.closest(BLOCK_SELECTOR))).map(registerTextNode) : [];
+      return [...blockEntries, ...textEntries].sort((left, right) => viewportDistance(left.element) - viewportDistance(right.element)).map((entry) => ({
         id: entry.id,
         text: entry.original,
         viewport: isInViewport(entry.element),
@@ -266,7 +320,12 @@
       const originalWrapper = document.createElement("span");
       originalWrapper.dataset.twbtOriginal = entry.id;
       originalWrapper.style.display = "contents";
-      while (entry.element.firstChild) originalWrapper.append(entry.element.firstChild);
+      if (entry.kind === "text") {
+        entry.node.replaceWith(originalWrapper);
+        originalWrapper.append(entry.node);
+      } else {
+        while (entry.element.firstChild) originalWrapper.append(entry.element.firstChild);
+      }
       const translationElement = document.createElement("span");
       translationElement.dataset.twbtTranslation = entry.id;
       translationElement.setAttribute("lang", "zh-Hant-TW");
@@ -274,7 +333,8 @@
       translationElement.style.color = "inherit";
       translationElement.style.font = "inherit";
       translationElement.style.lineHeight = "inherit";
-      entry.element.append(originalWrapper, translationElement);
+      if (entry.kind === "text") originalWrapper.after(translationElement);
+      else entry.element.append(originalWrapper, translationElement);
       entry.originalWrapper = originalWrapper;
       entry.translationElement = translationElement;
     }, apply = function(translations, displayMode = "bilingual") {
@@ -306,10 +366,14 @@
       let restored = 0;
       for (const entry of entriesById.values()) {
         if (!entry.element.isConnected || !entry.originalWrapper?.isConnected) continue;
-        while (entry.originalWrapper.firstChild) {
-          entry.element.insertBefore(entry.originalWrapper.firstChild, entry.originalWrapper);
+        if (entry.kind === "text") {
+          entry.originalWrapper.replaceWith(entry.node);
+        } else {
+          while (entry.originalWrapper.firstChild) {
+            entry.element.insertBefore(entry.originalWrapper.firstChild, entry.originalWrapper);
+          }
+          entry.originalWrapper.remove();
         }
-        entry.originalWrapper.remove();
         entry.translationElement?.remove();
         entry.originalWrapper = null;
         entry.translationElement = null;
@@ -320,6 +384,7 @@
     };
     globalThis.__translateWebContentReady = true;
     const idsByBlock = /* @__PURE__ */ new WeakMap();
+    const idsByTextNode = /* @__PURE__ */ new WeakMap();
     const entriesById = /* @__PURE__ */ new Map();
     let progressTimer = null;
     let hideProgressTimer = null;

@@ -1,9 +1,17 @@
-import { collectTranslationBlocks, makeStableBlockId } from './text-nodes.js';
+import {
+  BLOCK_SELECTOR,
+  collectTranslationBlocks,
+  collectVisibleEnglishTextNodes,
+  makeStableBlockId,
+  makeStableId,
+  normalizeBlockText,
+} from './text-nodes.js';
 
 if (!globalThis.__translateWebContentReady) {
   globalThis.__translateWebContentReady = true;
 
   const idsByBlock = new WeakMap();
+  const idsByTextNode = new WeakMap();
   const entriesById = new Map();
   let progressTimer = null;
   let hideProgressTimer = null;
@@ -103,7 +111,7 @@ if (!globalThis.__translateWebContentReady) {
     }
   }
 
-  function register({ element, text, type, heading }) {
+  function registerBlock({ element, text, type, heading }) {
     const knownId = idsByBlock.get(element);
     if (knownId) return entriesById.get(knownId);
 
@@ -116,6 +124,7 @@ if (!globalThis.__translateWebContentReady) {
 
     const entry = {
       id,
+      kind: 'block',
       element,
       original: text,
       type,
@@ -129,11 +138,47 @@ if (!globalThis.__translateWebContentReady) {
     return entry;
   }
 
+  function registerTextNode(node) {
+    const knownId = idsByTextNode.get(node);
+    if (knownId) return entriesById.get(knownId);
+
+    const text = normalizeBlockText(node.data);
+    let collision = 0;
+    let id = makeStableId(node, text, collision);
+    while (entriesById.has(id) && entriesById.get(id).node !== node) {
+      collision += 1;
+      id = makeStableId(node, text, collision);
+    }
+
+    const entry = {
+      id,
+      kind: 'text',
+      node,
+      element: node.parentElement,
+      original: text,
+      type: node.parentElement?.tagName.toLowerCase() || 'text',
+      heading: '',
+      originalWrapper: null,
+      translationElement: null,
+      translation: null,
+    };
+    idsByTextNode.set(node, id);
+    entriesById.set(id, entry);
+    return entry;
+  }
+
   function collect(scope = 'main') {
     for (const [id, entry] of entriesById) {
       if (!entry.element.isConnected) entriesById.delete(id);
     }
-    return collectTranslationBlocks({ mode: scope }).map(register)
+    const blockEntries = collectTranslationBlocks({ mode: scope }).map(registerBlock);
+    const selectedBlocks = new WeakSet(blockEntries.map(({ element }) => element));
+    const textEntries = scope === 'page'
+      ? collectVisibleEnglishTextNodes()
+        .filter((node) => !selectedBlocks.has(node.parentElement?.closest(BLOCK_SELECTOR)))
+        .map(registerTextNode)
+      : [];
+    return [...blockEntries, ...textEntries]
       .sort((left, right) => viewportDistance(left.element) - viewportDistance(right.element))
       .map((entry) => ({
       id: entry.id,
@@ -148,7 +193,12 @@ if (!globalThis.__translateWebContentReady) {
     const originalWrapper = document.createElement('span');
     originalWrapper.dataset.twbtOriginal = entry.id;
     originalWrapper.style.display = 'contents';
-    while (entry.element.firstChild) originalWrapper.append(entry.element.firstChild);
+    if (entry.kind === 'text') {
+      entry.node.replaceWith(originalWrapper);
+      originalWrapper.append(entry.node);
+    } else {
+      while (entry.element.firstChild) originalWrapper.append(entry.element.firstChild);
+    }
 
     const translationElement = document.createElement('span');
     translationElement.dataset.twbtTranslation = entry.id;
@@ -158,7 +208,8 @@ if (!globalThis.__translateWebContentReady) {
     translationElement.style.font = 'inherit';
     translationElement.style.lineHeight = 'inherit';
 
-    entry.element.append(originalWrapper, translationElement);
+    if (entry.kind === 'text') originalWrapper.after(translationElement);
+    else entry.element.append(originalWrapper, translationElement);
     entry.originalWrapper = originalWrapper;
     entry.translationElement = translationElement;
   }
@@ -194,10 +245,14 @@ if (!globalThis.__translateWebContentReady) {
     let restored = 0;
     for (const entry of entriesById.values()) {
       if (!entry.element.isConnected || !entry.originalWrapper?.isConnected) continue;
-      while (entry.originalWrapper.firstChild) {
-        entry.element.insertBefore(entry.originalWrapper.firstChild, entry.originalWrapper);
+      if (entry.kind === 'text') {
+        entry.originalWrapper.replaceWith(entry.node);
+      } else {
+        while (entry.originalWrapper.firstChild) {
+          entry.element.insertBefore(entry.originalWrapper.firstChild, entry.originalWrapper);
+        }
+        entry.originalWrapper.remove();
       }
-      entry.originalWrapper.remove();
       entry.translationElement?.remove();
       entry.originalWrapper = null;
       entry.translationElement = null;
