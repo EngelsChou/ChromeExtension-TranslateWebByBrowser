@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.5.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.6.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -104,7 +104,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.5.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.6.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -119,6 +119,7 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 - 第一個快速批次只送出最接近目前視窗的 1 個段落，其餘可見段落仍優先於畫面外內容。提示會明確要求 ChatGPT 與 M365 不搜尋、不調查、不使用工具，直接完成文字翻譯；在第一筆通過驗證的翻譯出現前每 150 毫秒檢查一次。M365 同時讀取正式 Copilot 訊息與暫時的即時輸出段落，並明確排除使用者提示與輸入框；只要收到有效 ID 的中文，就立即插入原頁英文下方。
 - 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即插入原網頁。雙語模式固定把中文放在該段英文下方，而且 provider 必須收到原網頁套用確認後才能繼續。
 - ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
+- ChatGPT 工作分頁在介面提供切換選項時，會先從「工作」切換成「對話」再送出翻譯，避免直接文字轉換進入耗時的任務規劃流程。擴充功能不會更改模型、推理強度，也不會啟用額外耗用額度的快速模式。
 - M365 的 Lexical/contenteditable composer 同樣會先以 paste 同步狀態，並在任何寫入路徑後一律送出 input/change 事件；避免畫面曾短暫出現文字，但 React 狀態未更新而使「傳送」按鈕一直停用。
 - ChatGPT 或 M365 若只完成部分段落，已驗證的中文會立即保留；逾時或格式錯誤後只重送剩餘段落，並以新工作視窗避免沿用故障中的對話狀態。
 - 實際等待時間仍取決於 provider、帳號負載與網路。獨立 provider 工作視窗會保持為作用中分頁且不搶走原網頁焦點，以降低必須手動切換分頁才顯示回覆的情況。
@@ -136,7 +137,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.5.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.6.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -158,6 +159,8 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains exactly one nearest viewport block, minimizing the time to the first visible Chinese result; remaining viewport blocks still run before offscreen content. ChatGPT and M365 are explicitly told not to browse, research, or use tools for this text-only task and are polled every 150 ms until the first validated item arrives. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON. M365 streaming candidates are read from both the final Copilot message and its temporary live-output paragraphs, while user-authored prompts and the composer are explicitly excluded.
 
 ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
+
+Before submitting a translation, the ChatGPT worker switches from **Work** to **Chat/Conversation** when that interface selector is available. The extension does not change the selected model, reasoning level, or paid fast-mode setting. This avoids task-planning overhead for a direct text transformation.
 
 ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
 
@@ -240,7 +243,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.5.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.6.zip`.
 
 ## YouTube captions and transcripts
 

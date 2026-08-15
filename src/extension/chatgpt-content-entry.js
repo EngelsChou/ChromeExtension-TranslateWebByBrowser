@@ -7,6 +7,7 @@ import { PROVIDER_RESPONSE_TIMEOUT_MS } from './job-guard.js';
 
 const COMPOSER_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], [contenteditable="true"][data-virtualkeyboard]';
 const ASSISTANT_SELECTOR = '[data-message-author-role="assistant"]';
+const CONVERSATION_MODE_PATTERN = /^(?:chat|conversation|對話)$/iu;
 if (!globalThis.__translateWebChatGptContentReady) {
   globalThis.__translateWebChatGptContentReady = true;
   let busy = false;
@@ -81,7 +82,28 @@ function assistantText(node) {
   return content?.innerText?.trim() ?? '';
 }
 
+function controlLabel(node) {
+  return [node?.getAttribute('aria-label'), node?.textContent]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
+
+async function ensureConversationMode(timeout = 5_000) {
+  const control = [...document.querySelectorAll('[role="radio"]')]
+    .find((node) => CONVERSATION_MODE_PATTERN.test(controlLabel(node)));
+  if (!control || control.getAttribute('aria-checked') === 'true') return;
+  control.click();
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (control.getAttribute('aria-checked') === 'true' && document.querySelector(COMPOSER_SELECTOR)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('無法將 ChatGPT 切換到對話模式。');
+}
+
 async function submitAndWait(prompt, items, requestId) {
+  await ensureConversationMode();
   const composer = document.querySelector(COMPOSER_SELECTOR);
   if (!composer) throw new Error('找不到 ChatGPT 輸入框，請確認已登入。');
   const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];

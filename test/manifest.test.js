@@ -150,6 +150,13 @@ test('ChatGPT composer integration updates React state and fails fast before an 
   assert.match(chatgptSource, /傳送按鈕\|尚未送出\|輸入框/u);
 });
 
+test('ChatGPT translation switches away from Work mode without changing model speed settings', () => {
+  assert.match(chatgptSource, /CONVERSATION_MODE_PATTERN/u);
+  assert.match(chatgptSource, /ensureConversationMode/u);
+  assert.match(chatgptSource, /await ensureConversationMode\(\)/u);
+  assert.doesNotMatch(chatgptSource, /啟用快速模式|menuitemcheckbox|推理強度/u);
+});
+
 test('M365 composer integration synchronizes Lexical state before checking the Send button', () => {
   const composerHandler = m365Source.slice(
     m365Source.indexOf('async function setComposerValue'),

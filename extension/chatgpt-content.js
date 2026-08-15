@@ -120,6 +120,7 @@
   // src/extension/chatgpt-content-entry.js
   var COMPOSER_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], [contenteditable="true"][data-virtualkeyboard]';
   var ASSISTANT_SELECTOR = '[data-message-author-role="assistant"]';
+  var CONVERSATION_MODE_PATTERN = /^(?:chat|conversation|對話)$/iu;
   if (!globalThis.__translateWebChatGptContentReady) {
     let sessionStatus = function() {
       const composer = document.querySelector(COMPOSER_SELECTOR);
@@ -171,6 +172,8 @@
     }, assistantText = function(node) {
       const content = node?.querySelector('.markdown, .prose, [class*="markdown"]') ?? node;
       return content?.innerText?.trim() ?? "";
+    }, controlLabel = function(node) {
+      return [node?.getAttribute("aria-label"), node?.textContent].filter(Boolean).join(" ").trim();
     };
     globalThis.__translateWebChatGptContentReady = true;
     let busy = false;
@@ -187,7 +190,19 @@
       }
       throw new Error("ChatGPT \u50B3\u9001\u6309\u9215\u5C1A\u672A\u53EF\u7528\u3002");
     }
+    async function ensureConversationMode(timeout = 5e3) {
+      const control = [...document.querySelectorAll('[role="radio"]')].find((node) => CONVERSATION_MODE_PATTERN.test(controlLabel(node)));
+      if (!control || control.getAttribute("aria-checked") === "true") return;
+      control.click();
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (control.getAttribute("aria-checked") === "true" && document.querySelector(COMPOSER_SELECTOR)) return;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      throw new Error("\u7121\u6CD5\u5C07 ChatGPT \u5207\u63DB\u5230\u5C0D\u8A71\u6A21\u5F0F\u3002");
+    }
     async function submitAndWait(prompt, items, requestId) {
+      await ensureConversationMode();
       const composer = document.querySelector(COMPOSER_SELECTOR);
       if (!composer) throw new Error("\u627E\u4E0D\u5230 ChatGPT \u8F38\u5165\u6846\uFF0C\u8ACB\u78BA\u8A8D\u5DF2\u767B\u5165\u3002");
       const beforeNodes = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
