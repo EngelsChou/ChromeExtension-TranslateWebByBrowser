@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.4.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.5.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -25,7 +25,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
 
-Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains exactly one nearest viewport block, minimizing the time to the first visible Chinese result; remaining viewport blocks still run before offscreen content. ChatGPT and M365 are polled every 150 ms until the first validated item arrives. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON. M365 streaming candidates are read from both the final Copilot message and its temporary live-output paragraphs, while user-authored prompts and the composer are explicitly excluded.
+Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains exactly one nearest viewport block, minimizing the time to the first visible Chinese result; remaining viewport blocks still run before offscreen content. ChatGPT and M365 are explicitly told not to browse, research, or use tools for this text-only task and are polled every 150 ms until the first validated item arrives. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON. M365 streaming candidates are read from both the final Copilot message and its temporary live-output paragraphs, while user-authored prompts and the composer are explicitly excluded.
 
 ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
 
@@ -112,7 +112,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.4.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.5.zip`.
 
 ## YouTube captions and transcripts
 

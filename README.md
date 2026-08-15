@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.4.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.5.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -104,7 +104,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.4.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.5.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -116,7 +116,7 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 ## 翻譯速度與進度
 
 - popup 關閉後，原網頁右下角仍會顯示目前階段、已經過秒數、批次與已套用段落數。
-- 第一個快速批次只送出最接近目前視窗的 1 個段落，其餘可見段落仍優先於畫面外內容。ChatGPT 與 M365 在第一筆通過驗證的翻譯出現前每 150 毫秒檢查一次。M365 同時讀取正式 Copilot 訊息與暫時的即時輸出段落，並明確排除使用者提示與輸入框；只要收到有效 ID 的中文，就立即插入原頁英文下方。
+- 第一個快速批次只送出最接近目前視窗的 1 個段落，其餘可見段落仍優先於畫面外內容。提示會明確要求 ChatGPT 與 M365 不搜尋、不調查、不使用工具，直接完成文字翻譯；在第一筆通過驗證的翻譯出現前每 150 毫秒檢查一次。M365 同時讀取正式 Copilot 訊息與暫時的即時輸出段落，並明確排除使用者提示與輸入框；只要收到有效 ID 的中文，就立即插入原頁英文下方。
 - 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即插入原網頁。雙語模式固定把中文放在該段英文下方，而且 provider 必須收到原網頁套用確認後才能繼續。
 - ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
 - M365 的 Lexical/contenteditable composer 同樣會先以 paste 同步狀態，並在任何寫入路徑後一律送出 input/change 事件；避免畫面曾短暫出現文字，但 React 狀態未更新而使「傳送」按鈕一直停用。
@@ -136,7 +136,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.4.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.5.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -155,7 +155,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
 
-Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains exactly one nearest viewport block, minimizing the time to the first visible Chinese result; remaining viewport blocks still run before offscreen content. ChatGPT and M365 are polled every 150 ms until the first validated item arrives. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON. M365 streaming candidates are read from both the final Copilot message and its temporary live-output paragraphs, while user-authored prompts and the composer are explicitly excluded.
+Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains exactly one nearest viewport block, minimizing the time to the first visible Chinese result; remaining viewport blocks still run before offscreen content. ChatGPT and M365 are explicitly told not to browse, research, or use tools for this text-only task and are polled every 150 ms until the first validated item arrives. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON. M365 streaming candidates are read from both the final Copilot message and its temporary live-output paragraphs, while user-authored prompts and the composer are explicitly excluded.
 
 ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
 
@@ -240,7 +240,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.4.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.5.zip`.
 
 ## YouTube captions and transcripts
 
