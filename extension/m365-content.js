@@ -201,6 +201,9 @@
         node?.getAttribute("data-testid"),
         node?.textContent
       ].filter(Boolean).join(" ").trim();
+    }, composerText = function(composer) {
+      const text = "value" in composer ? composer.value : composer.innerText || composer.textContent || "";
+      return text.replace(/[\u200B-\u200D\uFEFF]/gu, "").replace(/\s+/gu, " ").trim();
     }, sessionStatus = function() {
       const composer = findComposer();
       const blocked = location.pathname.toLowerCase().startsWith("/chat/blocked");
@@ -214,6 +217,12 @@
         url: location.href,
         message: blocked ? "\u6B64\u5E33\u6236\u6216\u7D44\u7E54\u7121\u6CD5\u4F7F\u7528 Microsoft 365 Copilot Chat\u3002\u8ACB\u78BA\u8A8D\u6388\u6B0A\u8207\u79DF\u7528\u6236\u539F\u5247\uFF1B\u5C1A\u672A\u9001\u51FA\u4EFB\u4F55\u6587\u5B57\u3002" : void 0
       };
+    }, userMessageCount = function() {
+      return (/* @__PURE__ */ new Set([
+        ...document.querySelectorAll('.fai-UserMessage, [class*="UserMessage"]')
+      ])).size;
+    }, isGenerating = function() {
+      return [...document.querySelectorAll('button, [role="button"]')].some((node) => isClickable(node) && /(?:stop|停止|中止|取消生成|取消產生|取消回覆|取消回应)/iu.test(labelOf(node)));
     }, isClickable = function(node) {
       return Boolean(node) && !node.disabled && node.getAttribute("aria-disabled") !== "true" && isVisible(node);
     }, belongsToComposer = function(button, composer) {
@@ -240,7 +249,7 @@
         return /(?:copy|複製|复制|コピー|복사)/iu.test(label) && !/(?:code|程式碼|代码|table|表格)/iu.test(label) && !node.closest('pre, code, [class*="code"], [data-testid*="code"]');
       }).length;
     }, responseState = function(items, excludedCandidates = /* @__PURE__ */ new Set()) {
-      const generating = [...document.querySelectorAll('button, [role="button"]')].some((node) => isClickable(node) && /(?:stop|停止|中止|取消生成|取消產生|取消回覆|取消回应)/iu.test(labelOf(node)));
+      const generating = isGenerating();
       const candidates = responseCandidateTexts().filter((text) => !excludedCandidates.has(text));
       let translations = null;
       try {
@@ -270,6 +279,7 @@
       }
       composer.replaceChildren();
       let inserted = false;
+      let needsSyntheticInput = false;
       try {
         const dataTransfer = new DataTransfer();
         dataTransfer.setData("text/plain", value);
@@ -284,15 +294,43 @@
         const paragraph = document.createElement("p");
         paragraph.textContent = value;
         composer.append(paragraph);
+        needsSyntheticInput = true;
       }
-      composer.dispatchEvent(new InputEvent("input", {
-        bubbles: true,
-        composed: true,
-        inputType: "insertText",
-        data: value
-      }));
+      if (needsSyntheticInput) {
+        composer.dispatchEvent(new InputEvent("input", {
+          bubbles: true,
+          composed: true,
+          inputType: "insertText",
+          data: null
+        }));
+      }
       composer.dispatchEvent(new Event("change", { bubbles: true }));
       await sleep(100);
+    }
+    async function waitForSubmission(composer, previousUserMessages, timeout = 2500) {
+      const submitted = () => !composerText(composer) || userMessageCount() > previousUserMessages || isGenerating();
+      let deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (submitted()) return;
+        await sleep(100);
+      }
+      composer.focus();
+      for (const type of ["keydown", "keypress", "keyup"]) {
+        composer.dispatchEvent(new KeyboardEvent(type, {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true,
+          cancelable: true
+        }));
+      }
+      deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (submitted()) return;
+        await sleep(100);
+      }
+      throw new Error("Microsoft 365 Copilot \u50B3\u9001\u6309\u9215\u5C1A\u672A\u9001\u51FA\u7FFB\u8B6F\u5167\u5BB9\u3002");
     }
     async function waitForSendButton(composer, timeout = 15e3) {
       const selectors = [
@@ -320,10 +358,13 @@
       if (!composer) throw new Error("\u627E\u4E0D\u5230 Microsoft 365 Copilot \u8F38\u5165\u6846\uFF0C\u8ACB\u78BA\u8A8D\u5DF2\u767B\u5165 Copilot Chat\u3002");
       const before = responseState(items);
       const previousCandidates = new Set(before.candidates);
+      const previousUserMessages = userMessageCount();
       await setComposerValue(composer, prompt);
-      const written = "value" in composer ? composer.value : composer.innerText || composer.textContent;
-      if (!written?.trim()) throw new Error("Microsoft 365 Copilot \u8F38\u5165\u6846\u4ECD\u662F\u7A7A\u767D\uFF0C\u672A\u9001\u51FA\u6587\u5B57\u3002");
+      if (composerText(composer) !== composerText({ textContent: prompt })) {
+        throw new Error("Microsoft 365 Copilot \u8F38\u5165\u6846\u5167\u5BB9\u91CD\u8907\u6216\u4E0D\u5B8C\u6574\uFF0C\u5C1A\u672A\u9001\u51FA\u3002");
+      }
       (await waitForSendButton(composer)).click();
+      await waitForSubmission(composer, previousUserMessages);
       const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
       let stableTranslation = "";
       let stableCount = 0;

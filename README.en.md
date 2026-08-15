@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.8.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.9.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -35,7 +35,7 @@ ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/cha
 
 During translation, the extension runs ChatGPT or M365 in a dedicated provider worker window without taking focus from the original page. The provider remains the active tab in that window, reducing cases where background rendering pauses until the user switches tabs. The worker closes automatically when the job finishes. If Chrome cannot create it, the extension falls back to the existing provider tab and reports a progress warning.
 
-The M365 Lexical/contenteditable composer is synchronized through paste plus unconditional input/change events before the extension looks for an enabled Send button. This prevents text that briefly appears in the DOM but never reaches M365's React state from stalling a batch.
+The M365 Lexical/contenteditable composer synchronizes through paste without inserting the same prompt a second time. Before submission, the extension verifies that the complete prompt appears exactly once. After clicking Send, it requires the composer to clear or generation to start within a few seconds; otherwise it tries Enter as a fallback and fails quickly for retry instead of waiting for the entire batch timeout.
 
 ## Block-level architecture
 
@@ -114,7 +114,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.8.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.9.zip`.
 
 ## YouTube captions and transcripts
 

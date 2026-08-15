@@ -165,6 +165,10 @@ test('M365 composer integration synchronizes Lexical state before checking the S
   assert.match(composerHandler, /ClipboardEvent\('paste'/u);
   assert.match(composerHandler, /new InputEvent\('input'/u);
   assert.match(composerHandler, /new Event\('change'/u);
-  assert.match(composerHandler, /if \(!inserted\) \{[\s\S]*?\n {4}\}\n {4}composer\.dispatchEvent\(new InputEvent/u);
+  assert.match(composerHandler, /if \(!inserted\) \{[\s\S]*?\n {4}\}\n {4}if \(needsSyntheticInput\)/u);
+  assert.doesNotMatch(composerHandler.slice(composerHandler.indexOf('composer.replaceChildren')), /data:\s*value/u);
   assert.match(m365Source, /await setComposerValue\(composer, prompt\)/u);
+  assert.match(m365Source, /composerText\(composer\) !== composerText\(\{ textContent: prompt \}\)/u);
+  assert.match(m365Source, /await waitForSubmission\(composer, previousUserMessages\)/u);
+  assert.match(m365Source, /new KeyboardEvent\(type/u);
 });

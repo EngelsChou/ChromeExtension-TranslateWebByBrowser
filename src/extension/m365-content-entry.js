@@ -70,6 +70,11 @@ if (!globalThis.__translateWebM365ContentReady) {
     ].filter(Boolean).join(' ').trim();
   }
 
+  function composerText(composer) {
+    const text = 'value' in composer ? composer.value : composer.innerText || composer.textContent || '';
+    return text.replace(/[\u200B-\u200D\uFEFF]/gu, '').replace(/\s+/gu, ' ').trim();
+  }
+
   function sessionStatus() {
     const composer = findComposer();
     const blocked = location.pathname.toLowerCase().startsWith('/chat/blocked');
@@ -107,6 +112,7 @@ if (!globalThis.__translateWebM365ContentReady) {
 
     composer.replaceChildren();
     let inserted = false;
+    let needsSyntheticInput = false;
     try {
       const dataTransfer = new DataTransfer();
       dataTransfer.setData('text/plain', value);
@@ -120,15 +126,55 @@ if (!globalThis.__translateWebM365ContentReady) {
       const paragraph = document.createElement('p');
       paragraph.textContent = value;
       composer.append(paragraph);
+      needsSyntheticInput = true;
     }
-    composer.dispatchEvent(new InputEvent('input', {
-      bubbles: true,
-      composed: true,
-      inputType: 'insertText',
-      data: value,
-    }));
+    if (needsSyntheticInput) {
+      composer.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        composed: true,
+        inputType: 'insertText',
+        data: null,
+      }));
+    }
     composer.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(100);
+  }
+
+  function userMessageCount() {
+    return new Set([
+      ...document.querySelectorAll('.fai-UserMessage, [class*="UserMessage"]'),
+    ]).size;
+  }
+
+  function isGenerating() {
+    return [...document.querySelectorAll('button, [role="button"]')]
+      .some((node) => isClickable(node)
+        && /(?:stop|停止|中止|取消生成|取消產生|取消回覆|取消回应)/iu.test(labelOf(node)));
+  }
+
+  async function waitForSubmission(composer, previousUserMessages, timeout = 2_500) {
+    const submitted = () => !composerText(composer)
+      || userMessageCount() > previousUserMessages
+      || isGenerating();
+    let deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (submitted()) return;
+      await sleep(100);
+    }
+
+    composer.focus();
+    for (const type of ['keydown', 'keypress', 'keyup']) {
+      composer.dispatchEvent(new KeyboardEvent(type, {
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+        bubbles: true, cancelable: true,
+      }));
+    }
+    deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      if (submitted()) return;
+      await sleep(100);
+    }
+    throw new Error('Microsoft 365 Copilot 傳送按鈕尚未送出翻譯內容。');
   }
 
   function isClickable(node) {
@@ -199,8 +245,7 @@ if (!globalThis.__translateWebM365ContentReady) {
   }
 
   function responseState(items, excludedCandidates = new Set()) {
-    const generating = [...document.querySelectorAll('button, [role="button"]')]
-      .some((node) => isClickable(node) && /(?:stop|停止|中止|取消生成|取消產生|取消回覆|取消回应)/iu.test(labelOf(node)));
+    const generating = isGenerating();
     const candidates = responseCandidateTexts().filter((text) => !excludedCandidates.has(text));
     let translations = null;
     try {
@@ -214,10 +259,13 @@ if (!globalThis.__translateWebM365ContentReady) {
     if (!composer) throw new Error('找不到 Microsoft 365 Copilot 輸入框，請確認已登入 Copilot Chat。');
     const before = responseState(items);
     const previousCandidates = new Set(before.candidates);
+    const previousUserMessages = userMessageCount();
     await setComposerValue(composer, prompt);
-    const written = 'value' in composer ? composer.value : composer.innerText || composer.textContent;
-    if (!written?.trim()) throw new Error('Microsoft 365 Copilot 輸入框仍是空白，未送出文字。');
+    if (composerText(composer) !== composerText({ textContent: prompt })) {
+      throw new Error('Microsoft 365 Copilot 輸入框內容重複或不完整，尚未送出。');
+    }
     (await waitForSendButton(composer)).click();
+    await waitForSubmission(composer, previousUserMessages);
 
     const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
     let stableTranslation = '';
