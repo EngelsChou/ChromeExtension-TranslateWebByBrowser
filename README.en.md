@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.2.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.3.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -25,7 +25,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 5. On first use, explicitly open the selected provider and personally complete sign-in, MFA, or organizational verification.
 6. Return to the original page and select **Translate current page**. **Restore original** removes translations and restores the original nodes.
 
-Translation progress remains visible at the bottom-right of the original webpage after the popup closes. Every paragraph intersecting the current viewport is placed in the first priority batch. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON, so the visible page does not wait for the entire response or offscreen content.
+Translation progress remains visible at the bottom-right of the original webpage after the popup closes. The fast first batch contains at most three nearest viewport blocks and about 650 source characters; remaining viewport blocks still run before offscreen content. Completed, validated paragraph objects are applied while the provider is still streaming the final strict JSON, so the first Chinese results can appear sooner without delaying the rest of the page.
 
 ChatGPT composer submission treats its enabled Send button as the source of truth after paste/input synchronization. It does not reject visibly inserted content merely because ChatGPT exposes an empty custom `value` property.
 
@@ -48,7 +48,8 @@ Current-page content script
   └─ emits only {id, text, context:{type, heading}}
            ↕ Chrome runtime messaging
 Manifest V3 service worker
-  ├─ puts every current-viewport paragraph in the first priority batch
+  ├─ limits the fast first batch to 3 blocks / about 650 source characters
+  ├─ keeps the remaining viewport blocks ahead of offscreen content
   ├─ continues with up to 24 blocks / about 5,000 characters per batch
   ├─ creates an unfocused active provider worker window and closes it afterward
   ├─ requires source-page acknowledgement for each valid streamed result
@@ -111,7 +112,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.2.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.3.zip`.
 
 ## YouTube captions and transcripts
 

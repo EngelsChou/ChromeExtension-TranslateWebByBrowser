@@ -3,15 +3,17 @@
   function createBatches(items, {
     maxItems = 24,
     maxCharacters = 5e3,
-    firstMaxItems = Math.min(4, maxItems),
-    firstMaxCharacters = Math.min(900, maxCharacters)
+    firstMaxItems = Math.min(3, maxItems),
+    firstMaxCharacters = Math.min(650, maxCharacters)
   } = {}) {
     const batches = [];
     let batch = [];
     let characters = 0;
     const viewportItems = items.filter((item) => item.viewport);
-    const queuedItems = items.filter((item) => !item.viewport);
-    if (viewportItems.length) batches.push(viewportItems);
+    const queuedItems = [
+      ...viewportItems,
+      ...items.filter((item) => !item.viewport)
+    ];
     for (const item of queuedItems) {
       const size = item.text.length;
       const itemLimit = batches.length === 0 ? firstMaxItems : maxItems;
