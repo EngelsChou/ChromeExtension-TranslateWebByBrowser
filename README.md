@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.1.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.2.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -103,7 +103,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.1.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.2.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -118,6 +118,7 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 - 目前視窗內相交的每個標題、段落與清單項目都會進入第一個優先批次；畫面外內容稍後才處理。
 - 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即插入原網頁。雙語模式固定把中文放在該段英文下方，而且 provider 必須收到原網頁套用確認後才能繼續。
 - ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
+- M365 的 Lexical/contenteditable composer 同樣會先以 paste 同步狀態，並在任何寫入路徑後一律送出 input/change 事件；避免畫面曾短暫出現文字，但 React 狀態未更新而使「傳送」按鈕一直停用。
 - ChatGPT 或 M365 若只完成部分段落，已驗證的中文會立即保留；逾時或格式錯誤後只重送剩餘段落，並以新工作視窗避免沿用故障中的對話狀態。
 - 實際等待時間仍取決於 provider、帳號負載與網路。獨立 provider 工作視窗會保持為作用中分頁且不搶走原網頁焦點，以降低必須手動切換分頁才顯示回覆的情況。
 - 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。
@@ -134,7 +135,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.1.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.2.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -237,7 +238,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.1.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.2.zip`.
 
 ## YouTube captions and transcripts
 

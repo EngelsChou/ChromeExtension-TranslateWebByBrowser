@@ -197,34 +197,6 @@
         url: location.href,
         message: blocked ? "\u6B64\u5E33\u6236\u6216\u7D44\u7E54\u7121\u6CD5\u4F7F\u7528 Microsoft 365 Copilot Chat\u3002\u8ACB\u78BA\u8A8D\u6388\u6B0A\u8207\u79DF\u7528\u6236\u539F\u5247\uFF1B\u5C1A\u672A\u9001\u51FA\u4EFB\u4F55\u6587\u5B57\u3002" : void 0
       };
-    }, setComposerValue = function(composer, value) {
-      composer.focus();
-      if (composer instanceof HTMLTextAreaElement) {
-        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-        if (!setter) throw new Error("\u7121\u6CD5\u5BEB\u5165 Microsoft 365 Copilot \u8F38\u5165\u6846\u3002");
-        setter.call(composer, value);
-        composer.dispatchEvent(new InputEvent("input", {
-          bubbles: true,
-          composed: true,
-          inputType: "insertText",
-          data: value
-        }));
-        composer.dispatchEvent(new Event("change", { bubbles: true }));
-        return;
-      }
-      composer.replaceChildren();
-      const inserted = document.execCommand("insertText", false, value);
-      if (!inserted) {
-        const paragraph = document.createElement("p");
-        paragraph.textContent = value;
-        composer.append(paragraph);
-        composer.dispatchEvent(new InputEvent("input", {
-          bubbles: true,
-          composed: true,
-          inputType: "insertText",
-          data: value
-        }));
-      }
     }, isClickable = function(node) {
       return Boolean(node) && !node.disabled && node.getAttribute("aria-disabled") !== "true" && isVisible(node);
     }, belongsToComposer = function(button, composer) {
@@ -262,6 +234,48 @@
     globalThis.__translateWebM365ContentReady = true;
     let busy = false;
     const sleep = (duration) => new Promise((resolve) => setTimeout(resolve, duration));
+    async function setComposerValue(composer, value) {
+      composer.focus();
+      if (composer instanceof HTMLTextAreaElement) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+        if (!setter) throw new Error("\u7121\u6CD5\u5BEB\u5165 Microsoft 365 Copilot \u8F38\u5165\u6846\u3002");
+        setter.call(composer, value);
+        composer.dispatchEvent(new InputEvent("input", {
+          bubbles: true,
+          composed: true,
+          inputType: "insertText",
+          data: value
+        }));
+        composer.dispatchEvent(new Event("change", { bubbles: true }));
+        await sleep(100);
+        return;
+      }
+      composer.replaceChildren();
+      let inserted = false;
+      try {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData("text/plain", value);
+        const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(paste, "clipboardData", { value: dataTransfer });
+        composer.dispatchEvent(paste);
+        inserted = (composer.innerText || composer.textContent || "").includes(value);
+      } catch {
+      }
+      if (!inserted) inserted = document.execCommand("insertText", false, value);
+      if (!inserted) {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = value;
+        composer.append(paragraph);
+      }
+      composer.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        composed: true,
+        inputType: "insertText",
+        data: value
+      }));
+      composer.dispatchEvent(new Event("change", { bubbles: true }));
+      await sleep(100);
+    }
     async function waitForSendButton(composer, timeout = 15e3) {
       const selectors = [
         'button[class*="SendButton"][type="submit"]',
@@ -288,7 +302,7 @@
       if (!composer) throw new Error("\u627E\u4E0D\u5230 Microsoft 365 Copilot \u8F38\u5165\u6846\uFF0C\u8ACB\u78BA\u8A8D\u5DF2\u767B\u5165 Copilot Chat\u3002");
       const before = responseState(items);
       const previousCandidates = new Set(before.candidates);
-      setComposerValue(composer, prompt);
+      await setComposerValue(composer, prompt);
       const written = "value" in composer ? composer.value : composer.innerText || composer.textContent;
       if (!written?.trim()) throw new Error("Microsoft 365 Copilot \u8F38\u5165\u6846\u4ECD\u662F\u7A7A\u767D\uFF0C\u672A\u9001\u51FA\u6587\u5B57\u3002");
       (await waitForSendButton(composer)).click();

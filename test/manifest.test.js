@@ -145,3 +145,15 @@ test('ChatGPT composer integration updates React state and fails fast before an 
   assert.match(chatgptSource, /waitForSendButton\(composer\)\)\.click/u);
   assert.match(chatgptSource, /傳送按鈕\|尚未送出\|輸入框/u);
 });
+
+test('M365 composer integration synchronizes Lexical state before checking the Send button', () => {
+  const composerHandler = m365Source.slice(
+    m365Source.indexOf('async function setComposerValue'),
+    m365Source.indexOf('function isClickable'),
+  );
+  assert.match(composerHandler, /ClipboardEvent\('paste'/u);
+  assert.match(composerHandler, /new InputEvent\('input'/u);
+  assert.match(composerHandler, /new Event\('change'/u);
+  assert.match(composerHandler, /if \(!inserted\) \{[\s\S]*?\n {4}\}\n {4}composer\.dispatchEvent\(new InputEvent/u);
+  assert.match(m365Source, /await setComposerValue\(composer, prompt\)/u);
+});
