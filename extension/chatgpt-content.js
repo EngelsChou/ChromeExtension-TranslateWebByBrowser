@@ -110,6 +110,12 @@
     return translations;
   }
 
+  // src/extension/job-guard.js
+  var PROVIDER_RESPONSE_TIMEOUT_MS = 55e3;
+  var PROVIDER_BATCH_TIMEOUT_MS = 12e4;
+  var TRANSLATION_JOB_TIMEOUT_MS = 8 * 6e4;
+  var TRANSLATION_JOB_STALE_MS = PROVIDER_BATCH_TIMEOUT_MS + 3e4;
+
   // src/extension/chatgpt-content-entry.js
   var COMPOSER_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], [contenteditable="true"][data-virtualkeyboard]';
   var ASSISTANT_SELECTOR = '[data-message-author-role="assistant"]';
@@ -187,7 +193,7 @@
       const beforeText = assistantText(beforeNodes.at(-1));
       setComposerValue(composer, prompt);
       (await waitForSendButton(composer)).click();
-      const deadline = Date.now() + 18e4;
+      const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
       const emittedIds = /* @__PURE__ */ new Set();
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 700));
@@ -221,7 +227,7 @@
           }
         }
       }
-      throw new Error("\u7B49\u5F85 ChatGPT \u56DE\u8986\u903E\u6642\uFF08180 \u79D2\uFF09\u3002");
+      throw new Error(`\u7B49\u5F85 ChatGPT \u56DE\u8986\u903E\u6642\uFF08${Math.round(PROVIDER_RESPONSE_TIMEOUT_MS / 1e3)} \u79D2\uFF09\u3002`);
     }
     async function translate(items, requestId) {
       if (busy) throw new Error("ChatGPT \u5206\u9801\u6B63\u5728\u8655\u7406\u53E6\u4E00\u6279\u7FFB\u8B6F\u3002");

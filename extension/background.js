@@ -54,6 +54,44 @@
     return translations;
   }
 
+  // src/extension/job-guard.js
+  var PROVIDER_BATCH_TIMEOUT_MS = 12e4;
+  var TRANSLATION_JOB_TIMEOUT_MS = 8 * 6e4;
+  var TRANSLATION_JOB_STALE_MS = PROVIDER_BATCH_TIMEOUT_MS + 3e4;
+  function isActiveJob(job) {
+    return job?.state === "preparing" || job?.state === "running";
+  }
+  function expireStaleJob(job, now = Date.now()) {
+    if (!isActiveJob(job) || !job.updatedAt || now - job.updatedAt <= TRANSLATION_JOB_STALE_MS) return job;
+    return {
+      ...job,
+      state: "error",
+      stage: "error",
+      stale: true,
+      error: `\u7FFB\u8B6F\u5DE5\u4F5C\u5DF2\u8D85\u904E ${Math.round(TRANSLATION_JOB_STALE_MS / 1e3)} \u79D2\u6C92\u6709\u9032\u5EA6\uFF0C\u5DF2\u81EA\u52D5\u505C\u6B62\u3002\u5DF2\u5B8C\u6210\u7684\u4E2D\u6587\u4ECD\u6703\u4FDD\u7559\uFF0C\u53EF\u91CD\u8A66\u6216\u6062\u5FA9\u539F\u6587\u3002`,
+      updatedAt: now
+    };
+  }
+  function withTimeout(promise, timeoutMs, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const error = new Error(message);
+        error.code = "TRANSLATION_TIMEOUT";
+        reject(error);
+      }, timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+  function remainingItems(items, appliedIds) {
+    return items.filter(({ id }) => !appliedIds.has(id));
+  }
+  function splitRetryItems(items) {
+    if (items.length <= 1) return [items];
+    const midpoint = Math.ceil(items.length / 2);
+    return [items.slice(0, midpoint), items.slice(midpoint)];
+  }
+
   // src/extension/providers.js
   var PROVIDERS = Object.freeze({
     chatgpt: Object.freeze({
@@ -228,7 +266,7 @@
     return { provider: provider.id, providerName: provider.name, tabId: tab.id };
   }
   function updateJob(detail, targetTabId) {
-    const job = { updatedAt: Date.now(), ...detail };
+    const job = { updatedAt: Date.now(), ...detail, ...targetTabId ? { targetTabId } : {} };
     chrome.storage.session.set({ translationJob: job }).catch(() => {
     });
     chrome.runtime.sendMessage({ type: "TRANSLATION_PROGRESS", ...job }).catch(() => {
@@ -256,7 +294,10 @@
       if (result.applied !== translations.length) {
         throw new Error("\u539F\u7DB2\u9801\u5728\u4E32\u6D41\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C\u7121\u6CD5\u5B89\u5168\u5957\u7528\u6BB5\u843D\u3002");
       }
-      translations.forEach(({ id }) => pending.appliedIds.add(id));
+      translations.forEach(({ id }) => {
+        pending.appliedIds.add(id);
+        pending.context.appliedIds.add(id);
+      });
       pending.context.translated = (pending.context.translated ?? 0) + result.applied;
       updateJob({
         state: "running",
@@ -280,6 +321,9 @@
     const targetTab = await activeTargetTab();
     context.targetTabId = targetTab.id;
     context.startedAt = Date.now();
+    context.deadline = context.startedAt + TRANSLATION_JOB_TIMEOUT_MS;
+    context.appliedIds = /* @__PURE__ */ new Set();
+    context.completed = 0;
     await ensureTargetContentScript(targetTab.id);
     updateJob({
       state: "preparing",
@@ -319,71 +363,123 @@
       await chrome.windows.update(providerTab.windowId, { focused: true });
       throw new Error(status.message || `\u8ACB\u5148\u5728 ${provider.name} \u5206\u9801\u5B8C\u6210\u767B\u5165\u6216\u8655\u7406\u5E33\u6236\u63D0\u793A\u3002`);
     }
-    const worker = await createProviderWorker(provider, providerTab, targetTab);
-    const translationTab = worker.tab;
+    let worker = await createProviderWorker(provider, providerTab, targetTab);
     const batches = createBatches(items);
-    let translated = 0;
     context.total = batches.length;
-    context.translated = translated;
+    context.translated = 0;
+    async function replaceWorker() {
+      await worker.close();
+      worker = await createProviderWorker(provider, providerTab, targetTab);
+    }
+    async function submitBatch(batch, batchIndex, retryAttempt = 0) {
+      const outstanding = remainingItems(batch, context.appliedIds);
+      if (!outstanding.length) return;
+      const remainingJobTime = context.deadline - Date.now();
+      if (remainingJobTime <= 0) {
+        const error = new Error(`\u6574\u9AD4\u7FFB\u8B6F\u5DF2\u8D85\u904E ${Math.round(TRANSLATION_JOB_TIMEOUT_MS / 6e4)} \u5206\u9418\uFF0C\u5DF2\u81EA\u52D5\u505C\u6B62\u3002`);
+        error.code = "TRANSLATION_TIMEOUT";
+        throw error;
+      }
+      updateJob({
+        state: "running",
+        stage: retryAttempt ? "retrying" : "waiting",
+        provider: provider.id,
+        providerName: provider.name,
+        scope,
+        displayMode,
+        completed: batchIndex,
+        total: batches.length,
+        translated: context.translated,
+        blocks: items.length,
+        retryAttempt,
+        workerActive: worker.dedicated,
+        warning: worker.warning,
+        startedAt: context.startedAt
+      }, targetTab.id);
+      const requestId = crypto.randomUUID();
+      const pending = {
+        requestId,
+        providerTabId: worker.tab.id,
+        provider,
+        targetTabId: targetTab.id,
+        batch: outstanding,
+        batchIndex,
+        totalBatches: batches.length,
+        displayMode,
+        scope,
+        context,
+        appliedIds: /* @__PURE__ */ new Set(),
+        applyChain: Promise.resolve()
+      };
+      pendingRequests.set(requestId, pending);
+      let failure;
+      try {
+        const timeoutMs = Math.min(PROVIDER_BATCH_TIMEOUT_MS, remainingJobTime);
+        const result = await withTimeout(chrome.tabs.sendMessage(worker.tab.id, {
+          type: "PROVIDER_TRANSLATE_BATCH",
+          items: outstanding,
+          requestId
+        }), timeoutMs, `${provider.name} \u672C\u6279\u7B49\u5F85\u8D85\u904E ${Math.round(timeoutMs / 1e3)} \u79D2\u3002`);
+        await pending.applyChain;
+        if (!result?.ok) throw new Error(result?.error || `${provider.name} \u6C92\u6709\u56DE\u50B3\u53EF\u7528\u7684\u7FFB\u8B6F\u3002`);
+        const translations = validateTranslations(result.translations, outstanding);
+        const unapplied = remainingItems(translations, context.appliedIds);
+        if (unapplied.length) {
+          const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
+            type: "APPLY_TRANSLATIONS",
+            translations: unapplied,
+            displayMode
+          });
+          if (applyResult.applied !== unapplied.length) {
+            throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${unapplied.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002`);
+          }
+          unapplied.forEach(({ id }) => context.appliedIds.add(id));
+          context.translated += applyResult.applied;
+        }
+      } catch (error) {
+        failure = error;
+      } finally {
+        try {
+          await pending.applyChain;
+        } catch (error) {
+          failure ??= error;
+        }
+        pendingRequests.delete(requestId);
+      }
+      if (!failure) return;
+      const remaining = remainingItems(outstanding, context.appliedIds);
+      if (!remaining.length) return;
+      if (retryAttempt >= 2 || Date.now() >= context.deadline) {
+        const error = new Error(
+          `${provider.name} \u4ECD\u6709 ${remaining.length} \u500B\u6BB5\u843D\u672A\u5B8C\u6210\uFF0C\u5DF2\u505C\u6B62\u91CD\u8A66\uFF1B\u5DF2\u5B8C\u6210\u7684 ${context.translated}/${items.length} \u500B\u6BB5\u843D\u6703\u4FDD\u7559\u3002\u539F\u56E0\uFF1A${failure.message}`
+        );
+        error.code = failure.code;
+        throw error;
+      }
+      updateJob({
+        state: "running",
+        stage: "retrying",
+        provider: provider.id,
+        providerName: provider.name,
+        scope,
+        displayMode,
+        completed: batchIndex,
+        total: batches.length,
+        translated: context.translated,
+        blocks: items.length,
+        retryAttempt: retryAttempt + 1,
+        warning: `${failure.message} \u5C07\u5269\u9918 ${remaining.length} \u500B\u6BB5\u843D\u62C6\u5C0F\u91CD\u8A66\u3002`,
+        startedAt: context.startedAt
+      }, targetTab.id);
+      await replaceWorker();
+      for (const retryBatch of splitRetryItems(remaining)) {
+        await submitBatch(retryBatch, batchIndex, retryAttempt + 1);
+      }
+    }
     try {
       for (let index = 0; index < batches.length; index += 1) {
-        const batch = batches[index];
-        updateJob({
-          state: "running",
-          stage: "waiting",
-          provider: provider.id,
-          providerName: provider.name,
-          scope,
-          displayMode,
-          completed: index,
-          total: batches.length,
-          translated,
-          blocks: items.length,
-          workerActive: worker.dedicated,
-          warning: worker.warning,
-          startedAt: context.startedAt
-        }, targetTab.id);
-        const requestId = crypto.randomUUID();
-        const pending = {
-          requestId,
-          providerTabId: translationTab.id,
-          provider,
-          targetTabId: targetTab.id,
-          batch,
-          batchIndex: index,
-          totalBatches: batches.length,
-          displayMode,
-          scope,
-          context,
-          appliedIds: /* @__PURE__ */ new Set(),
-          applyChain: Promise.resolve()
-        };
-        pendingRequests.set(requestId, pending);
-        try {
-          const result = await chrome.tabs.sendMessage(translationTab.id, {
-            type: "PROVIDER_TRANSLATE_BATCH",
-            items: batch,
-            requestId
-          });
-          await pending.applyChain;
-          if (!result?.ok) throw new Error(result?.error || `${provider.name} \u6C92\u6709\u56DE\u50B3\u53EF\u7528\u7684\u7FFB\u8B6F\u3002`);
-          const translations = validateTranslations(result.translations, batch);
-          const remaining = translations.filter(({ id }) => !pending.appliedIds.has(id));
-          if (remaining.length) {
-            const applyResult = await chrome.tabs.sendMessage(targetTab.id, {
-              type: "APPLY_TRANSLATIONS",
-              translations: remaining,
-              displayMode
-            });
-            if (applyResult.applied !== remaining.length) {
-              throw new Error(`\u539F\u7DB2\u9801\u5728\u7FFB\u8B6F\u671F\u9593\u5DF2\u91CD\u7E6A\uFF0C${remaining.length - applyResult.applied} \u500B\u6BB5\u843D\u7121\u6CD5\u5B89\u5168\u5957\u7528\u3002\u8ACB\u6062\u5FA9\u5F8C\u91CD\u8A66\u3002`);
-            }
-            context.translated += applyResult.applied;
-          }
-        } finally {
-          pendingRequests.delete(requestId);
-        }
-        translated = context.translated;
+        await submitBatch(batches[index], index);
+        context.completed = index + 1;
         updateJob({
           state: "running",
           stage: "applied",
@@ -391,9 +487,9 @@
           providerName: provider.name,
           scope,
           displayMode,
-          completed: index + 1,
+          completed: context.completed,
           total: batches.length,
-          translated,
+          translated: context.translated,
           blocks: items.length,
           workerActive: worker.dedicated,
           warning: worker.warning,
@@ -403,7 +499,7 @@
     } finally {
       await worker.close();
     }
-    return { translated, total: items.length, batches: batches.length };
+    return { translated: context.translated, total: items.length, batches: batches.length };
   }
   async function restorePage(providerId) {
     getProvider(providerId);
@@ -438,7 +534,7 @@
           providerName: getProvider(providerId).name,
           ...options,
           error: error.message,
-          completed: 0,
+          completed: context.completed ?? 0,
           total: context.total ?? 0,
           translated: context.translated ?? 0,
           blocks: context.blocks ?? 0,
@@ -454,7 +550,10 @@
   }
   async function translationJob() {
     const stored = await chrome.storage.session.get("translationJob");
-    return stored.translationJob ?? null;
+    const job = stored.translationJob ?? null;
+    const current = expireStaleJob(job);
+    if (current !== job) await chrome.storage.session.set({ translationJob: current });
+    return current;
   }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const task = message?.type === "PROVIDER_TRANSLATION_PARTIAL" ? applyPartialTranslations(message, _sender) : message?.type === "GET_PROVIDER_STATUS" ? providerStatus(message.provider) : message?.type === "OPEN_PROVIDER" ? openProvider(message.provider) : message?.type === "TRANSLATE_PAGE" ? enqueueTranslation(message.provider, {

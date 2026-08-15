@@ -162,10 +162,10 @@
     const jobResult = await chrome.runtime.sendMessage({ type: "GET_TRANSLATION_JOB" });
     const job = jobResult.ok ? jobResult.state ? jobResult : null : null;
     if (job?.provider === elements.provider.value) {
-      if (job.state === "running") {
+      if (job.state === "preparing" || job.state === "running") {
         elements.progress.hidden = false;
         elements.progressBar.style.width = `${progressPercent(job)}%`;
-        setStatus("pending", "\u7FFB\u8B6F\u4ECD\u5728\u9032\u884C", `\u6279\u6B21 ${job.completed}/${job.total}\uFF0C\u5DF2\u8655\u7406 ${job.translated}/${job.blocks} \u500B\u6BB5\u843D`);
+        setStatus("pending", "\u7FFB\u8B6F\u4ECD\u5728\u9032\u884C", job.state === "preparing" ? `\u6B63\u5728\u6E96\u5099\uFF0C\u5171\u627E\u5230 ${job.blocks || 0} \u500B\u6BB5\u843D` : `\u6279\u6B21 ${job.completed}/${job.total}\uFF0C\u5DF2\u8655\u7406 ${job.translated}/${job.blocks} \u500B\u6BB5\u843D`);
       } else if (job.state === "complete") {
         elements.progress.hidden = false;
         elements.progressBar.style.width = "100%";

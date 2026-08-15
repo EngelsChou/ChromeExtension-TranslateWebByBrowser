@@ -162,6 +162,25 @@
     return nodes;
   }
 
+  // src/extension/job-guard.js
+  var PROVIDER_BATCH_TIMEOUT_MS = 12e4;
+  var TRANSLATION_JOB_TIMEOUT_MS = 8 * 6e4;
+  var TRANSLATION_JOB_STALE_MS = PROVIDER_BATCH_TIMEOUT_MS + 3e4;
+  function isActiveJob(job) {
+    return job?.state === "preparing" || job?.state === "running";
+  }
+  function expireStaleJob(job, now = Date.now()) {
+    if (!isActiveJob(job) || !job.updatedAt || now - job.updatedAt <= TRANSLATION_JOB_STALE_MS) return job;
+    return {
+      ...job,
+      state: "error",
+      stage: "error",
+      stale: true,
+      error: `\u7FFB\u8B6F\u5DE5\u4F5C\u5DF2\u8D85\u904E ${Math.round(TRANSLATION_JOB_STALE_MS / 1e3)} \u79D2\u6C92\u6709\u9032\u5EA6\uFF0C\u5DF2\u81EA\u52D5\u505C\u6B62\u3002\u5DF2\u5B8C\u6210\u7684\u4E2D\u6587\u4ECD\u6703\u4FDD\u7559\uFF0C\u53EF\u91CD\u8A66\u6216\u6062\u5FA9\u539F\u6587\u3002`,
+      updatedAt: now
+    };
+  }
+
   // src/extension/content-entry.js
   if (!globalThis.__translateWebContentReady) {
     let viewportDistance = function(element) {
@@ -245,6 +264,13 @@
       if (job.state === "preparing" || job.state === "running") {
         progressTimer = setInterval(() => {
           if (!currentProgress || panel.hidden) return;
+          const current = expireStaleJob(currentProgress);
+          if (current !== currentProgress) {
+            currentProgress = current;
+            bar.style.background = "#dc2626";
+            clearInterval(progressTimer);
+            progressTimer = null;
+          }
           const copy = progressCopy(currentProgress);
           title.textContent = copy[0];
           detail.textContent = copy[1];

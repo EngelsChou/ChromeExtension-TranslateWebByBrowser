@@ -149,10 +149,12 @@ async function initialize() {
   const jobResult = await chrome.runtime.sendMessage({ type: 'GET_TRANSLATION_JOB' });
   const job = jobResult.ok ? jobResult.state ? jobResult : null : null;
   if (job?.provider === elements.provider.value) {
-    if (job.state === 'running') {
+    if (job.state === 'preparing' || job.state === 'running') {
       elements.progress.hidden = false;
       elements.progressBar.style.width = `${progressPercent(job)}%`;
-      setStatus('pending', '翻譯仍在進行', `批次 ${job.completed}/${job.total}，已處理 ${job.translated}/${job.blocks} 個段落`);
+      setStatus('pending', '翻譯仍在進行', job.state === 'preparing'
+        ? `正在準備，共找到 ${job.blocks || 0} 個段落`
+        : `批次 ${job.completed}/${job.total}，已處理 ${job.translated}/${job.blocks} 個段落`);
     } else if (job.state === 'complete') {
       elements.progress.hidden = false;
       elements.progressBar.style.width = '100%';

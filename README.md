@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.0.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.1.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -46,6 +46,8 @@ Manifest V3 service worker
   ├─ 後續每批最多 24 段、約 5,000 字元
   ├─ 建立不搶焦點的作用中 provider 工作視窗，完成後自動關閉
   ├─ 每收到一組合法翻譯，就要求原網頁確認已套用
+  ├─ 每批都有最長等待時間，整體工作最長 8 分鐘
+  ├─ 失敗時只把尚未完成的 ID 拆成更小批次重試
   ├─ 保存進度與最後錯誤，popup 關閉後仍可查詢
   ├─ 再次驗證完整 ID/schema 與實際套用數量
   └─ 網頁重繪造成 mapping 失效時安全停止
@@ -88,7 +90,8 @@ Extension **不傳送整頁 HTML 或 DOM 結構**。每個段落或可見介面�
 - M365 必須具有 Copilot Chat 權限；導向 `/chat/blocked` 時會停止並顯示授權/政策錯誤。
 - 不翻譯 shadow DOM、cross-origin iframe、圖片文字、placeholder、`aria-label` 或 canvas 內容。
 - SPA 若在翻譯期間替換段落，Extension 會拒絕套用失去 mapping 的批次；可恢復後重試。
-- 超長單一段落、provider 用量限制或無效 JSON 可能造成逾時；失敗批次不會套用。獨立工作視窗可降低背景分頁節流，但無法改變 provider 本身的回覆速度。
+- 超長單一段落、provider 用量限制或無效 JSON 可能造成逾時。每次 provider 回覆最多等待 55 秒、每批背景工作最多 120 秒，整體工作最多 8 分鐘；超過 150 秒沒有任何進度的舊工作會自動標示為失敗，不會再顯示數小時或數天的計時。
+- 批次失敗時，已成功顯示的中文會保留；Extension 只把尚未完成的 ID 拆小重試，最多兩層。仍失敗時會清楚回報剩餘數量，可直接再試或恢復原文。
 
 ## 開發
 
@@ -100,7 +103,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.0.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.1.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -115,6 +118,7 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 - 目前視窗內相交的每個標題、段落與清單項目都會進入第一個優先批次；畫面外內容稍後才處理。
 - 最終回覆仍須是嚴格 JSON；但串流中每產生一個完整且通過 ID/schema/繁中驗證的段落物件，就會立即插入原網頁。雙語模式固定把中文放在該段英文下方，而且 provider 必須收到原網頁套用確認後才能繼續。
 - ChatGPT 最新 composer 已加入 paste/input 狀態同步；內容寫入後以實際啟用的傳送按鈕為準，不再因空的 `value` 屬性誤判失敗。若按鈕沒有啟用，會快速失敗，不再空等 180 秒。
+- ChatGPT 或 M365 若只完成部分段落，已驗證的中文會立即保留；逾時或格式錯誤後只重送剩餘段落，並以新工作視窗避免沿用故障中的對話狀態。
 - 實際等待時間仍取決於 provider、帳號負載與網路。獨立 provider 工作視窗會保持為作用中分頁且不搶走原網頁焦點，以降低必須手動切換分頁才顯示回覆的情況。
 - 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。
 
@@ -130,7 +134,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.0.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.1.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -174,6 +178,8 @@ Manifest V3 service worker
   ├─ continues with up to 24 blocks / about 5,000 characters per batch
   ├─ creates an unfocused active provider worker window and closes it afterward
   ├─ requires source-page acknowledgement for each valid streamed result
+  ├─ bounds every batch and the whole translation job with hard timeouts
+  ├─ splits and retries only IDs that have not already been applied
   ├─ retains progress and the last error across popup closure
   ├─ revalidates complete IDs/schema and applied counts
   └─ stops safely when page rerenders invalidate mappings
@@ -216,7 +222,8 @@ Web text is untrusted data; the prompt explicitly ignores embedded instructions.
 - M365 requires Copilot Chat entitlement. A `/chat/blocked` redirect stops translation with an entitlement/policy error.
 - Shadow DOM, cross-origin iframes, image text, placeholders, `aria-label`, and canvas content are not translated.
 - If an SPA replaces blocks during translation, the extension rejects mappings that can no longer be applied; restore and retry.
-- Very long individual blocks, provider usage limits, or invalid JSON may time out; invalid batches are never applied. The worker window reduces background throttling but cannot improve provider generation speed.
+- Very long blocks, provider limits, or invalid JSON may time out. A provider response is limited to 55 seconds, a background batch to 120 seconds, and the whole job to 8 minutes. Stored work with no progress for 150 seconds is marked failed instead of displaying an hours- or days-long timer.
+- On a batch failure, already applied Chinese remains visible. Only unfinished IDs are split into smaller retry batches, up to two levels; a final error reports the remaining count and still allows retry or restore.
 - Translation speed still depends on the selected provider, account capacity, and network. The on-page timer distinguishes provider waiting from a stalled extension.
 - A 5-second result cannot be guaranteed for remote web providers. In the documented Microsoft Learn viewport smoke test, ChatGPT completed eight visible blocks in about 3.5 seconds, while M365 took about 16.5 seconds because its web UI exposed the response only after completion.
 
@@ -230,7 +237,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.0.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.1.zip`.
 
 ## YouTube captions and transcripts
 

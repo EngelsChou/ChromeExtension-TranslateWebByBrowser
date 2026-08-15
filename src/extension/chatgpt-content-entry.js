@@ -3,6 +3,7 @@ import {
   parsePartialTranslationResponse,
   parseTranslationResponse,
 } from './chatgpt-core.js';
+import { PROVIDER_RESPONSE_TIMEOUT_MS } from './job-guard.js';
 
 const COMPOSER_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], [contenteditable="true"][data-virtualkeyboard]';
 const ASSISTANT_SELECTOR = '[data-message-author-role="assistant"]';
@@ -88,7 +89,7 @@ async function submitAndWait(prompt, items, requestId) {
   setComposerValue(composer, prompt);
   (await waitForSendButton(composer)).click();
 
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
   const emittedIds = new Set();
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 700));
@@ -123,7 +124,7 @@ async function submitAndWait(prompt, items, requestId) {
       } catch { /* keep waiting until the response is complete and schema-valid */ }
     }
   }
-  throw new Error('等待 ChatGPT 回覆逾時（180 秒）。');
+  throw new Error(`等待 ChatGPT 回覆逾時（${Math.round(PROVIDER_RESPONSE_TIMEOUT_MS / 1000)} 秒）。`);
 }
 
   async function translate(items, requestId) {

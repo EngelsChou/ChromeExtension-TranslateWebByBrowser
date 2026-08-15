@@ -8,6 +8,7 @@ const backgroundSource = await readFile(new URL('../src/extension/background.js'
 const contentSource = await readFile(new URL('../src/extension/content-entry.js', import.meta.url), 'utf8');
 const chatgptSource = await readFile(new URL('../src/extension/chatgpt-content-entry.js', import.meta.url), 'utf8');
 const m365Source = await readFile(new URL('../src/extension/m365-content-entry.js', import.meta.url), 'utf8');
+const jobGuardSource = await readFile(new URL('../src/extension/job-guard.js', import.meta.url), 'utf8');
 const popupHtml = await readFile(new URL('../extension/popup.html', import.meta.url), 'utf8');
 
 test('ships a self-contained Manifest V3 provider-tab extension', () => {
@@ -54,7 +55,7 @@ test('opening the popup cannot create or activate a provider tab', () => {
 
 test('translation uses paragraph blocks and verifies every applied result', () => {
   assert.match(backgroundSource, /COLLECT_TRANSLATION_BLOCKS/u);
-  assert.match(backgroundSource, /applyResult\.applied !== (?:translations|remaining)\.length/u);
+  assert.match(backgroundSource, /applyResult\.applied !== (?:translations|remaining|unapplied)\.length/u);
   assert.doesNotMatch(backgroundSource, /COLLECT_TEXT_NODES/u);
 });
 
@@ -77,6 +78,23 @@ test('translation progress remains visible on the original webpage', () => {
   assert.match(contentSource, /data-twbt-ui="progress"/u);
   assert.match(contentSource, /已經過/u);
   assert.match(contentSource, /viewportDistance/u);
+  assert.match(contentSource, /expireStaleJob\(currentProgress\)/u);
+});
+
+test('translation jobs have provider, batch, whole-job, and stale-state timeouts', () => {
+  assert.match(backgroundSource, /withTimeout\(chrome\.tabs\.sendMessage/u);
+  assert.match(backgroundSource, /TRANSLATION_JOB_TIMEOUT_MS/u);
+  assert.match(backgroundSource, /expireStaleJob\(job\)/u);
+  assert.match(jobGuardSource, /PROVIDER_RESPONSE_TIMEOUT_MS = 55_000/u);
+  assert.doesNotMatch(chatgptSource, /180_000/u);
+  assert.doesNotMatch(m365Source, /180_000/u);
+});
+
+test('failed batches preserve completed IDs and split only remaining work for retry', () => {
+  assert.match(backgroundSource, /context\.appliedIds\.add\(id\)/u);
+  assert.match(backgroundSource, /remainingItems\(outstanding, context\.appliedIds\)/u);
+  assert.match(backgroundSource, /splitRetryItems\(remaining\)/u);
+  assert.match(backgroundSource, /completed: context\.completed/u);
 });
 
 test('providers accept the first complete schema-valid response without an extra stability delay', () => {

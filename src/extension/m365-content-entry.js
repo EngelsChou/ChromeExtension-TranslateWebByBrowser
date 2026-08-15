@@ -3,6 +3,7 @@ import {
   mergePartialTranslationCandidates,
   parseFirstValidTranslationResponse,
 } from './chatgpt-core.js';
+import { PROVIDER_RESPONSE_TIMEOUT_MS } from './job-guard.js';
 
 const COMPOSER_SELECTORS = [
   'textarea#userInput',
@@ -197,7 +198,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     if (!written?.trim()) throw new Error('Microsoft 365 Copilot 輸入框仍是空白，未送出文字。');
     (await waitForSendButton(composer)).click();
 
-    const deadline = Date.now() + 180_000;
+    const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
     let stableTranslation = '';
     let stableCount = 0;
     let generationSeen = false;
@@ -231,7 +232,7 @@ if (!globalThis.__translateWebM365ContentReady) {
       const completionMarker = generationSeen || current.copyActions > before.copyActions;
       if (!current.generating && stableCount >= (completionMarker ? 1 : 3)) return current.translations;
     }
-    throw new Error('等待 Microsoft 365 Copilot 回覆逾時（180 秒）。');
+    throw new Error(`等待 Microsoft 365 Copilot 回覆逾時（${Math.round(PROVIDER_RESPONSE_TIMEOUT_MS / 1000)} 秒）。`);
   }
 
   async function translate(items, requestId) {

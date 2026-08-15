@@ -6,6 +6,7 @@ import {
   makeStableId,
   normalizeBlockText,
 } from './text-nodes.js';
+import { expireStaleJob } from './job-guard.js';
 
 if (!globalThis.__translateWebContentReady) {
   globalThis.__translateWebContentReady = true;
@@ -102,6 +103,13 @@ if (!globalThis.__translateWebContentReady) {
     if (job.state === 'preparing' || job.state === 'running') {
       progressTimer = setInterval(() => {
         if (!currentProgress || panel.hidden) return;
+        const current = expireStaleJob(currentProgress);
+        if (current !== currentProgress) {
+          currentProgress = current;
+          bar.style.background = '#dc2626';
+          clearInterval(progressTimer);
+          progressTimer = null;
+        }
         const copy = progressCopy(currentProgress);
         title.textContent = copy[0];
         detail.textContent = copy[1];
