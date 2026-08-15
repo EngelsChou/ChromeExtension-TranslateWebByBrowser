@@ -144,6 +144,31 @@
     return translations;
   }
 
+  // src/extension/m365-composer.js
+  function normalizeComposerText(value) {
+    return String(value ?? "").replace(/[\u200B-\u200D\uFEFF]/gu, "").replace(/\u00A0/gu, " ").replace(/\s+/gu, " ").trim();
+  }
+  function promptMarker(prompt) {
+    if (prompt.includes("INPUT_JSON=")) return "INPUT_JSON=";
+    if (prompt.includes("INPUT=")) return "INPUT=";
+    return null;
+  }
+  function hasCompleteSinglePrompt(actualValue, expectedPrompt) {
+    const actual = normalizeComposerText(actualValue);
+    const expected = normalizeComposerText(expectedPrompt);
+    const marker = promptMarker(expected);
+    if (!actual || !expected || !marker) return false;
+    const markerMatches = actual.split(marker).length - 1;
+    if (markerMatches !== 1) return false;
+    const actualPayload = actual.slice(actual.indexOf(marker) + marker.length);
+    const expectedPayload = expected.slice(expected.indexOf(marker) + marker.length);
+    try {
+      return JSON.stringify(JSON.parse(actualPayload)) === JSON.stringify(JSON.parse(expectedPayload));
+    } catch {
+      return false;
+    }
+  }
+
   // src/extension/job-guard.js
   var PROVIDER_RESPONSE_TIMEOUT_MS = 55e3;
   var PROVIDER_BATCH_TIMEOUT_MS = 12e4;
@@ -203,7 +228,16 @@
       ].filter(Boolean).join(" ").trim();
     }, composerText = function(composer) {
       const text = "value" in composer ? composer.value : composer.innerText || composer.textContent || "";
-      return text.replace(/[\u200B-\u200D\uFEFF]/gu, "").replace(/\s+/gu, " ").trim();
+      return normalizeComposerText(text);
+    }, notifyComposerCleared = function(composer) {
+      composer.replaceChildren();
+      composer.dispatchEvent(new InputEvent("input", {
+        bubbles: true,
+        composed: true,
+        inputType: "deleteContentBackward",
+        data: null
+      }));
+      composer.dispatchEvent(new Event("change", { bubbles: true }));
     }, sessionStatus = function() {
       const composer = findComposer();
       const blocked = location.pathname.toLowerCase().startsWith("/chat/blocked");
@@ -277,26 +311,28 @@
         await sleep(100);
         return;
       }
-      composer.replaceChildren();
-      let inserted = false;
-      let needsSyntheticInput = false;
+      notifyComposerCleared(composer);
+      await sleep(50);
       try {
         const dataTransfer = new DataTransfer();
         dataTransfer.setData("text/plain", value);
         const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
         Object.defineProperty(paste, "clipboardData", { value: dataTransfer });
         composer.dispatchEvent(paste);
-        inserted = (composer.innerText || composer.textContent || "").includes(value);
+        await sleep(150);
+        if (hasCompleteSinglePrompt(composerText(composer), value)) return;
       } catch {
       }
-      if (!inserted) inserted = document.execCommand("insertText", false, value);
-      if (!inserted) {
+      notifyComposerCleared(composer);
+      await sleep(50);
+      document.execCommand("insertText", false, value);
+      await sleep(100);
+      if (!hasCompleteSinglePrompt(composerText(composer), value)) {
+        notifyComposerCleared(composer);
+        await sleep(50);
         const paragraph = document.createElement("p");
         paragraph.textContent = value;
         composer.append(paragraph);
-        needsSyntheticInput = true;
-      }
-      if (needsSyntheticInput) {
         composer.dispatchEvent(new InputEvent("input", {
           bubbles: true,
           composed: true,
@@ -360,7 +396,7 @@
       const previousCandidates = new Set(before.candidates);
       const previousUserMessages = userMessageCount();
       await setComposerValue(composer, prompt);
-      if (composerText(composer) !== composerText({ textContent: prompt })) {
+      if (!hasCompleteSinglePrompt(composerText(composer), prompt)) {
         throw new Error("Microsoft 365 Copilot \u8F38\u5165\u6846\u5167\u5BB9\u91CD\u8907\u6216\u4E0D\u5B8C\u6574\uFF0C\u5C1A\u672A\u9001\u51FA\u3002");
       }
       (await waitForSendButton(composer)).click();

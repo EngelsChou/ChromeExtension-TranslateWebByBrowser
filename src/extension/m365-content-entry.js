@@ -3,6 +3,7 @@ import {
   mergePartialTranslationCandidates,
   parseFirstValidTranslationResponse,
 } from './chatgpt-core.js';
+import { hasCompleteSinglePrompt, normalizeComposerText } from './m365-composer.js';
 import { PROVIDER_RESPONSE_TIMEOUT_MS } from './job-guard.js';
 
 const COMPOSER_SELECTORS = [
@@ -72,7 +73,18 @@ if (!globalThis.__translateWebM365ContentReady) {
 
   function composerText(composer) {
     const text = 'value' in composer ? composer.value : composer.innerText || composer.textContent || '';
-    return text.replace(/[\u200B-\u200D\uFEFF]/gu, '').replace(/\s+/gu, ' ').trim();
+    return normalizeComposerText(text);
+  }
+
+  function notifyComposerCleared(composer) {
+    composer.replaceChildren();
+    composer.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      composed: true,
+      inputType: 'deleteContentBackward',
+      data: null,
+    }));
+    composer.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function sessionStatus() {
@@ -110,25 +122,29 @@ if (!globalThis.__translateWebM365ContentReady) {
       return;
     }
 
-    composer.replaceChildren();
-    let inserted = false;
-    let needsSyntheticInput = false;
+    notifyComposerCleared(composer);
+    await sleep(50);
+
     try {
       const dataTransfer = new DataTransfer();
       dataTransfer.setData('text/plain', value);
       const paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
       Object.defineProperty(paste, 'clipboardData', { value: dataTransfer });
       composer.dispatchEvent(paste);
-      inserted = (composer.innerText || composer.textContent || '').includes(value);
-    } catch { /* fall through to insertText */ }
-    if (!inserted) inserted = document.execCommand('insertText', false, value);
-    if (!inserted) {
+      await sleep(150);
+      if (hasCompleteSinglePrompt(composerText(composer), value)) return;
+    } catch { /* fall through to a clean insertText attempt */ }
+
+    notifyComposerCleared(composer);
+    await sleep(50);
+    document.execCommand('insertText', false, value);
+    await sleep(100);
+    if (!hasCompleteSinglePrompt(composerText(composer), value)) {
+      notifyComposerCleared(composer);
+      await sleep(50);
       const paragraph = document.createElement('p');
       paragraph.textContent = value;
       composer.append(paragraph);
-      needsSyntheticInput = true;
-    }
-    if (needsSyntheticInput) {
       composer.dispatchEvent(new InputEvent('input', {
         bubbles: true,
         composed: true,
@@ -261,7 +277,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     const previousCandidates = new Set(before.candidates);
     const previousUserMessages = userMessageCount();
     await setComposerValue(composer, prompt);
-    if (composerText(composer) !== composerText({ textContent: prompt })) {
+    if (!hasCompleteSinglePrompt(composerText(composer), prompt)) {
       throw new Error('Microsoft 365 Copilot 輸入框內容重複或不完整，尚未送出。');
     }
     (await waitForSendButton(composer)).click();
