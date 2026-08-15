@@ -100,14 +100,18 @@ test('failed batches preserve completed IDs and split only remaining work for re
 test('providers accept the first complete schema-valid response without an extra stability delay', () => {
   assert.match(chatgptSource, /parseTranslationResponse\(text, items\)/u);
   assert.doesNotMatch(chatgptSource, /stableCount/u);
-  assert.match(chatgptSource, /setTimeout\(resolve, 700\)/u);
-  assert.match(m365Source, /sleep\(800\)/u);
+  assert.match(chatgptSource, /setTimeout\(resolve, emittedIds\.size \? 400 : 150\)/u);
+  assert.match(m365Source, /sleep\(emittedIds\.size \? 400 : 150\)/u);
 });
 
 test('both providers stream validated paragraph objects back to the source page', () => {
   assert.match(backgroundSource, /PROVIDER_TRANSLATION_PARTIAL/u);
   assert.match(chatgptSource, /parsePartialTranslationResponse/u);
   assert.match(m365Source, /mergePartialTranslationCandidates/u);
+  assert.match(m365Source, /STREAMING_RESPONSE_SELECTOR/u);
+  assert.match(m365Source, /USER_MESSAGE_SELECTOR/u);
+  assert.match(m365Source, /!node\.closest\(USER_MESSAGE_SELECTOR\)/u);
+  assert.match(m365Source, /emittedIds\.size \? 400 : 150/u);
   assert.match(contentSource, /可視區翻譯已開始顯示/u);
 });
 

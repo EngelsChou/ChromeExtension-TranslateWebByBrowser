@@ -105,7 +105,7 @@ test('background keeps streamed translations and retries only unfinished IDs', a
 
   assert.equal(result.ok, true);
   assert.equal(result.translated, 3);
-  assert.deepEqual(harness.providerBatches, [['a', 'b', 'c'], ['b'], ['c']]);
+  assert.deepEqual(harness.providerBatches, [['a'], ['b', 'c']]);
   assert.deepEqual(harness.applied, ['a', 'b', 'c']);
   assert.equal(harness.stored.translationJob.state, 'complete');
   assert.equal(harness.stored.translationJob.translated, 3);
@@ -121,8 +121,8 @@ test('background reports a bounded partial failure without discarding applied Ch
   assert.equal(result.ok, false);
   assert.match(result.error, /已完成的 1\/3 個段落會保留/u);
   assert.deepEqual(harness.applied, ['a']);
-  assert.deepEqual(harness.providerBatches, [['a', 'b', 'c'], ['b'], ['b']]);
+  assert.deepEqual(harness.providerBatches, [['a'], ['b', 'c'], ['b'], ['b']]);
   assert.equal(harness.stored.translationJob.state, 'error');
   assert.equal(harness.stored.translationJob.translated, 1);
-  assert.equal(harness.stored.translationJob.completed, 0);
+  assert.equal(harness.stored.translationJob.completed, 1);
 });

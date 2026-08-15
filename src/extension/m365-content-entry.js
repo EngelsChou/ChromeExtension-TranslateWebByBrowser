@@ -34,6 +34,12 @@ const RESPONSE_CONTENT_SELECTOR = [
   '[class*="ResponseContent"]',
   '[class*="ResponseRenderer"]',
 ].join(',');
+const STREAMING_RESPONSE_SELECTOR = 'p, pre, code';
+const USER_MESSAGE_SELECTOR = [
+  '.fai-UserMessage',
+  '[class*="UserMessage"]',
+  '[data-testid="chatOutput"]',
+].join(',');
 
 if (!globalThis.__translateWebM365ContentReady) {
   globalThis.__translateWebM365ContentReady = true;
@@ -171,8 +177,11 @@ if (!globalThis.__translateWebM365ContentReady) {
     const nodes = [
       ...document.querySelectorAll(RESPONSE_CONTENT_SELECTOR),
       ...document.querySelectorAll(ASSISTANT_SELECTOR),
+      ...document.querySelectorAll(STREAMING_RESPONSE_SELECTOR),
     ];
     const texts = nodes
+      .filter((node) => !node.closest(USER_MESSAGE_SELECTOR))
+      .filter((node) => !COMPOSER_SELECTORS.some((selector) => node.closest(selector)))
       .map((node) => node.innerText?.trim() ?? '')
       .filter((text) => text.includes('"translations"'))
       .reverse();
@@ -216,7 +225,7 @@ if (!globalThis.__translateWebM365ContentReady) {
     let generationSeen = false;
     const emittedIds = new Set();
     while (Date.now() < deadline) {
-      await sleep(800);
+      await sleep(emittedIds.size ? 400 : 150);
       if (location.pathname.toLowerCase().startsWith('/chat/blocked')) {
         throw new Error('Microsoft 365 Copilot Chat 已導向封鎖頁面；請確認帳戶授權與租用戶原則。');
       }

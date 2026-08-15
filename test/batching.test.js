@@ -22,7 +22,7 @@ test('uses a small first batch before larger throughput-oriented batches', () =>
     text: 'A'.repeat(150),
   }));
   const batches = createBatches(items);
-  assert.deepEqual(batches.map((batch) => batch.length), [3, 9]);
+  assert.deepEqual(batches.map((batch) => batch.length), [1, 11]);
   assert.deepEqual(batches.flat().map(({ id }) => id), items.map(({ id }) => id));
 });
 
@@ -40,14 +40,14 @@ test('caps the fast first batch while keeping all viewport items ahead of offscr
   ]);
 });
 
-test('uses at most three short viewport items in the fast first batch', () => {
+test('uses exactly one viewport item in the fast first batch', () => {
   const items = Array.from({ length: 7 }, (_, index) => ({
     id: `visible-${index + 1}`,
     text: 'A'.repeat(150),
     viewport: true,
   }));
   const batches = createBatches(items);
-  assert.equal(batches[0].length, 3);
-  assert.equal(batches[0].reduce((total, item) => total + item.text.length, 0), 450);
+  assert.equal(batches[0].length, 1);
+  assert.equal(batches[0].reduce((total, item) => total + item.text.length, 0), 150);
   assert.deepEqual(batches.flat().map(({ id }) => id), items.map(({ id }) => id));
 });

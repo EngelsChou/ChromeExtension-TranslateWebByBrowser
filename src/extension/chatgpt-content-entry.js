@@ -92,7 +92,7 @@ async function submitAndWait(prompt, items, requestId) {
   const deadline = Date.now() + PROVIDER_RESPONSE_TIMEOUT_MS;
   const emittedIds = new Set();
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    await new Promise((resolve) => setTimeout(resolve, emittedIds.size ? 400 : 150));
     const assistants = [...document.querySelectorAll(ASSISTANT_SELECTOR)];
     const text = assistantText(assistants.at(-1));
     const streaming = Boolean(document.querySelector([

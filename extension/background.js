@@ -3,8 +3,8 @@
   function createBatches(items, {
     maxItems = 24,
     maxCharacters = 5e3,
-    firstMaxItems = Math.min(3, maxItems),
-    firstMaxCharacters = Math.min(650, maxCharacters)
+    firstMaxItems = 1,
+    firstMaxCharacters = Math.min(450, maxCharacters)
   } = {}) {
     const batches = [];
     let batch = [];

@@ -169,6 +169,12 @@
     '[class*="ResponseContent"]',
     '[class*="ResponseRenderer"]'
   ].join(",");
+  var STREAMING_RESPONSE_SELECTOR = "p, pre, code";
+  var USER_MESSAGE_SELECTOR = [
+    ".fai-UserMessage",
+    '[class*="UserMessage"]',
+    '[data-testid="chatOutput"]'
+  ].join(",");
   if (!globalThis.__translateWebM365ContentReady) {
     let isVisible = function(node) {
       if (!node) return false;
@@ -212,9 +218,10 @@
     }, responseCandidateTexts = function() {
       const nodes = [
         ...document.querySelectorAll(RESPONSE_CONTENT_SELECTOR),
-        ...document.querySelectorAll(ASSISTANT_SELECTOR)
+        ...document.querySelectorAll(ASSISTANT_SELECTOR),
+        ...document.querySelectorAll(STREAMING_RESPONSE_SELECTOR)
       ];
-      const texts = nodes.map((node) => node.innerText?.trim() ?? "").filter((text) => text.includes('"translations"')).reverse();
+      const texts = nodes.filter((node) => !node.closest(USER_MESSAGE_SELECTOR)).filter((node) => !COMPOSER_SELECTORS.some((selector) => node.closest(selector))).map((node) => node.innerText?.trim() ?? "").filter((text) => text.includes('"translations"')).reverse();
       return [...new Set(texts)];
     }, copyActionCount = function() {
       return [...document.querySelectorAll('button, [role="button"]')].filter((node) => {
@@ -312,7 +319,7 @@
       let generationSeen = false;
       const emittedIds = /* @__PURE__ */ new Set();
       while (Date.now() < deadline) {
-        await sleep(800);
+        await sleep(emittedIds.size ? 400 : 150);
         if (location.pathname.toLowerCase().startsWith("/chat/blocked")) {
           throw new Error("Microsoft 365 Copilot Chat \u5DF2\u5C0E\u5411\u5C01\u9396\u9801\u9762\uFF1B\u8ACB\u78BA\u8A8D\u5E33\u6236\u6388\u6B0A\u8207\u79DF\u7528\u6236\u539F\u5247\u3002");
         }
