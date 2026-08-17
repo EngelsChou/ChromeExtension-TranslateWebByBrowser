@@ -79,7 +79,50 @@ async function findOrCreateProviderTab(provider) {
   return { tab, status };
 }
 
+async function createReusedM365Worker(provider, sourceTab, targetTab) {
+  const originalWindowId = sourceTab.windowId;
+  const originalIndex = Number.isInteger(sourceTab.index) ? sourceTab.index : -1;
+  let workerWindow;
+  const restoreSourceTab = async () => {
+    try {
+      await chrome.tabs.move(sourceTab.id, { windowId: originalWindowId, index: originalIndex });
+    } catch { /* keep the signed-in provider tab open if its original window disappeared */ }
+  };
+  try {
+    workerWindow = await chrome.windows.create({
+      tabId: sourceTab.id,
+      type: 'popup',
+      focused: false,
+      width: 520,
+      height: 760,
+    });
+    if (!workerWindow?.id) throw new Error('無法移動已登入的 M365 分頁至工作視窗');
+    await chrome.tabs.update(sourceTab.id, { active: true, autoDiscardable: false });
+    await chrome.tabs.update(targetTab.id, { active: true });
+    await chrome.windows.update(targetTab.windowId, { focused: true });
+    const status = await waitForProviderContent(sourceTab.id, provider);
+    if (!status.ready || status.blocked || status.hasDraft) {
+      throw new Error(status.message || '既有 M365 分頁不適合執行翻譯。');
+    }
+    return {
+      tab: { ...sourceTab, windowId: workerWindow.id },
+      dedicated: true,
+      reused: true,
+      windowId: workerWindow.id,
+      close: restoreSourceTab,
+    };
+  } catch (error) {
+    if (workerWindow?.id) await restoreSourceTab();
+    throw error;
+  }
+}
+
 async function createProviderWorker(provider, sourceTab, targetTab) {
+  if (provider.id === 'm365' && sourceTab?.id && sourceTab?.windowId != null) {
+    try {
+      return await createReusedM365Worker(provider, sourceTab, targetTab);
+    } catch { /* fall back to a clean worker tab */ }
+  }
   let workerTab;
   let workerWindow;
   try {

@@ -144,6 +144,12 @@ test('translation runs in an unfocused active provider worker window and cleans 
   assert.match(backgroundSource, /await worker\.close\(\)/u);
 });
 
+test('M365 can reuse a loaded draft-free tab and restores it to the original window', () => {
+  assert.match(backgroundSource, /provider\.id === 'm365'/u);
+  assert.match(backgroundSource, /createReusedM365Worker/u);
+  assert.match(backgroundSource, /chrome\.tabs\.move\(sourceTab\.id, \{ windowId: originalWindowId, index: originalIndex \}\)/u);
+});
+
 test('a stalled first provider batch is briefly surfaced only while the target Chrome window is focused', () => {
   assert.match(providerTimingSource, /CHATGPT_WAKE_DELAY_MS = 8_000/u);
   assert.match(providerTimingSource, /M365_WAKE_DELAY_MS = 750/u);

@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-function createChromeHarness({ failRetries = false } = {}) {
+function createChromeHarness({ failRetries = false, providerId = 'chatgpt' } = {}) {
   let listener;
   let nextWorkerId = 3;
   let providerCall = 0;
   const providerBatches = [];
   const createdProviderUrls = [];
+  const movedTabs = [];
   const applied = [];
   const stored = {};
 
@@ -42,7 +43,13 @@ function createChromeHarness({ failRetries = false } = {}) {
     tabs: {
       async query(options) {
         if (options.active) return [{ id: 1, url: 'https://learn.microsoft.com/test', windowId: 10 }];
-        return [{ id: 2, url: 'https://chatgpt.com/', windowId: 20, status: 'complete' }];
+        return [{
+          id: 2,
+          url: providerId === 'm365' ? 'https://m365.cloud.microsoft/chat/' : 'https://chatgpt.com/',
+          windowId: 20,
+          index: 4,
+          status: 'complete',
+        }];
       },
       async create(options) {
         const id = nextWorkerId;
@@ -51,6 +58,10 @@ function createChromeHarness({ failRetries = false } = {}) {
         return { id, url: options.url, windowId: id + 100, status: 'complete' };
       },
       async update() {},
+      async move(tabId, options) {
+        movedTabs.push({ tabId, ...options });
+        return { id: tabId, windowId: options.windowId };
+      },
       async remove() {},
       async sendMessage(tabId, message) {
         if (message.type === 'PING_TRANSLATOR') return { ready: true };
@@ -91,7 +102,9 @@ function createChromeHarness({ failRetries = false } = {}) {
     },
   };
 
-  return { chrome, dispatch, providerBatches, createdProviderUrls, applied, stored };
+  return {
+    chrome, dispatch, providerBatches, createdProviderUrls, movedTabs, applied, stored,
+  };
 }
 
 async function loadBackground(chrome) {
@@ -130,4 +143,17 @@ test('background reports a bounded partial failure without discarding applied Ch
   assert.equal(harness.stored.translationJob.state, 'error');
   assert.equal(harness.stored.translationJob.translated, 1);
   assert.equal(harness.stored.translationJob.completed, 1);
+});
+
+test('M365 reuses and restores an already loaded draft-free provider tab', async () => {
+  const harness = createChromeHarness({ providerId: 'm365' });
+  await loadBackground(harness.chrome);
+  const result = await harness.dispatch({
+    type: 'TRANSLATE_PAGE', provider: 'm365', scope: 'main', displayMode: 'bilingual',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.translated, 3);
+  assert.deepEqual(harness.createdProviderUrls, []);
+  assert.deepEqual(harness.movedTabs, [{ tabId: 2, windowId: 20, index: 4 }]);
 });

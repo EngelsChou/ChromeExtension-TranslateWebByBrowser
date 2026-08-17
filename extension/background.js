@@ -202,7 +202,51 @@
     }
     return { tab, status };
   }
+  async function createReusedM365Worker(provider, sourceTab, targetTab) {
+    const originalWindowId = sourceTab.windowId;
+    const originalIndex = Number.isInteger(sourceTab.index) ? sourceTab.index : -1;
+    let workerWindow;
+    const restoreSourceTab = async () => {
+      try {
+        await chrome.tabs.move(sourceTab.id, { windowId: originalWindowId, index: originalIndex });
+      } catch {
+      }
+    };
+    try {
+      workerWindow = await chrome.windows.create({
+        tabId: sourceTab.id,
+        type: "popup",
+        focused: false,
+        width: 520,
+        height: 760
+      });
+      if (!workerWindow?.id) throw new Error("\u7121\u6CD5\u79FB\u52D5\u5DF2\u767B\u5165\u7684 M365 \u5206\u9801\u81F3\u5DE5\u4F5C\u8996\u7A97");
+      await chrome.tabs.update(sourceTab.id, { active: true, autoDiscardable: false });
+      await chrome.tabs.update(targetTab.id, { active: true });
+      await chrome.windows.update(targetTab.windowId, { focused: true });
+      const status = await waitForProviderContent(sourceTab.id, provider);
+      if (!status.ready || status.blocked || status.hasDraft) {
+        throw new Error(status.message || "\u65E2\u6709 M365 \u5206\u9801\u4E0D\u9069\u5408\u57F7\u884C\u7FFB\u8B6F\u3002");
+      }
+      return {
+        tab: { ...sourceTab, windowId: workerWindow.id },
+        dedicated: true,
+        reused: true,
+        windowId: workerWindow.id,
+        close: restoreSourceTab
+      };
+    } catch (error) {
+      if (workerWindow?.id) await restoreSourceTab();
+      throw error;
+    }
+  }
   async function createProviderWorker(provider, sourceTab, targetTab) {
+    if (provider.id === "m365" && sourceTab?.id && sourceTab?.windowId != null) {
+      try {
+        return await createReusedM365Worker(provider, sourceTab, targetTab);
+      } catch {
+      }
+    }
     let workerTab;
     let workerWindow;
     try {
