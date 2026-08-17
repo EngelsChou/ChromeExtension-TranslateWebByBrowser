@@ -136,7 +136,8 @@ test('bilingual results place a Chinese block after the original English content
 });
 
 test('translation runs in an unfocused active provider worker window and cleans it up', () => {
-  assert.match(backgroundSource, /chrome\.tabs\.duplicate\(sourceTab\.id\)/u);
+  assert.match(backgroundSource, /chrome\.tabs\.create\(\{ url: provider\.homeUrl, active: false \}\)/u);
+  assert.doesNotMatch(backgroundSource, /chrome\.tabs\.duplicate\(sourceTab\.id\)/u);
   assert.match(backgroundSource, /chrome\.windows\.create\(\{[\s\S]*?focused: false/u);
   assert.match(backgroundSource, /chrome\.tabs\.update\(workerTab\.id, \{ active: true, autoDiscardable: false \}\)/u);
   assert.match(backgroundSource, /await worker\.close\(\)/u);

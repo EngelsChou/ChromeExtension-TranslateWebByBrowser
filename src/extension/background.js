@@ -82,8 +82,9 @@ async function createProviderWorker(provider, sourceTab, targetTab) {
   let workerTab;
   let workerWindow;
   try {
-    workerTab = await chrome.tabs.duplicate(sourceTab.id);
-    if (!workerTab?.id) throw new Error('無法複製 provider 分頁');
+    workerTab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
+    if (!workerTab?.id) throw new Error('無法建立乾淨的 provider 工作分頁');
+    await chrome.tabs.update(workerTab.id, { autoDiscardable: false });
     workerWindow = await chrome.windows.create({
       tabId: workerTab.id,
       type: 'popup',
@@ -112,12 +113,34 @@ async function createProviderWorker(provider, sourceTab, targetTab) {
     } else if (workerTab?.id) {
       try { await chrome.tabs.remove(workerTab.id); } catch { /* already closed */ }
     }
-    return {
-      tab: sourceTab,
-      dedicated: false,
-      warning: `無法建立作用中的 provider 工作視窗，改用既有背景分頁：${error.message}`,
-      async close() {},
-    };
+    let fallbackTab;
+    try {
+      fallbackTab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
+      if (!fallbackTab?.id) throw new Error('無法建立乾淨的 provider 備援分頁');
+      await chrome.tabs.update(fallbackTab.id, { autoDiscardable: false });
+      const status = await waitForProviderContent(fallbackTab.id, provider);
+      if (!status.ready || status.blocked || status.hasDraft) {
+        throw new Error(status.message || `${provider.name} 備援分頁尚未就緒。`);
+      }
+      return {
+        tab: fallbackTab,
+        dedicated: false,
+        warning: `無法建立作用中的 provider 工作視窗，改用乾淨的背景分頁：${error.message}`,
+        async close() {
+          try { await chrome.tabs.remove(fallbackTab.id); } catch { /* already closed */ }
+        },
+      };
+    } catch (fallbackError) {
+      if (fallbackTab?.id) {
+        try { await chrome.tabs.remove(fallbackTab.id); } catch { /* already closed */ }
+      }
+      return {
+        tab: sourceTab,
+        dedicated: false,
+        warning: `無法建立乾淨的 provider 工作頁，最後改用既有分頁：${error.message}；${fallbackError.message}`,
+        async close() {},
+      };
+    }
   }
 }
 

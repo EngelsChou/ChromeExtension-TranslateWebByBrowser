@@ -199,8 +199,9 @@
     let workerTab;
     let workerWindow;
     try {
-      workerTab = await chrome.tabs.duplicate(sourceTab.id);
-      if (!workerTab?.id) throw new Error("\u7121\u6CD5\u8907\u88FD provider \u5206\u9801");
+      workerTab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
+      if (!workerTab?.id) throw new Error("\u7121\u6CD5\u5EFA\u7ACB\u4E7E\u6DE8\u7684 provider \u5DE5\u4F5C\u5206\u9801");
+      await chrome.tabs.update(workerTab.id, { autoDiscardable: false });
       workerWindow = await chrome.windows.create({
         tabId: workerTab.id,
         type: "popup",
@@ -238,13 +239,41 @@
         } catch {
         }
       }
-      return {
-        tab: sourceTab,
-        dedicated: false,
-        warning: `\u7121\u6CD5\u5EFA\u7ACB\u4F5C\u7528\u4E2D\u7684 provider \u5DE5\u4F5C\u8996\u7A97\uFF0C\u6539\u7528\u65E2\u6709\u80CC\u666F\u5206\u9801\uFF1A${error.message}`,
-        async close() {
+      let fallbackTab;
+      try {
+        fallbackTab = await chrome.tabs.create({ url: provider.homeUrl, active: false });
+        if (!fallbackTab?.id) throw new Error("\u7121\u6CD5\u5EFA\u7ACB\u4E7E\u6DE8\u7684 provider \u5099\u63F4\u5206\u9801");
+        await chrome.tabs.update(fallbackTab.id, { autoDiscardable: false });
+        const status = await waitForProviderContent(fallbackTab.id, provider);
+        if (!status.ready || status.blocked || status.hasDraft) {
+          throw new Error(status.message || `${provider.name} \u5099\u63F4\u5206\u9801\u5C1A\u672A\u5C31\u7DD2\u3002`);
         }
-      };
+        return {
+          tab: fallbackTab,
+          dedicated: false,
+          warning: `\u7121\u6CD5\u5EFA\u7ACB\u4F5C\u7528\u4E2D\u7684 provider \u5DE5\u4F5C\u8996\u7A97\uFF0C\u6539\u7528\u4E7E\u6DE8\u7684\u80CC\u666F\u5206\u9801\uFF1A${error.message}`,
+          async close() {
+            try {
+              await chrome.tabs.remove(fallbackTab.id);
+            } catch {
+            }
+          }
+        };
+      } catch (fallbackError) {
+        if (fallbackTab?.id) {
+          try {
+            await chrome.tabs.remove(fallbackTab.id);
+          } catch {
+          }
+        }
+        return {
+          tab: sourceTab,
+          dedicated: false,
+          warning: `\u7121\u6CD5\u5EFA\u7ACB\u4E7E\u6DE8\u7684 provider \u5DE5\u4F5C\u9801\uFF0C\u6700\u5F8C\u6539\u7528\u65E2\u6709\u5206\u9801\uFF1A${error.message}\uFF1B${fallbackError.message}`,
+          async close() {
+          }
+        };
+      }
     }
   }
   async function providerStatus(providerId) {

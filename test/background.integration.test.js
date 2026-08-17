@@ -6,6 +6,7 @@ function createChromeHarness({ failRetries = false } = {}) {
   let nextWorkerId = 3;
   let providerCall = 0;
   const providerBatches = [];
+  const createdProviderUrls = [];
   const applied = [];
   const stored = {};
 
@@ -42,10 +43,11 @@ function createChromeHarness({ failRetries = false } = {}) {
         if (options.active) return [{ id: 1, url: 'https://learn.microsoft.com/test', windowId: 10 }];
         return [{ id: 2, url: 'https://chatgpt.com/', windowId: 20, status: 'complete' }];
       },
-      async duplicate() {
+      async create(options) {
         const id = nextWorkerId;
         nextWorkerId += 1;
-        return { id, url: 'https://chatgpt.com/', windowId: id + 100, status: 'complete' };
+        createdProviderUrls.push(options.url);
+        return { id, url: options.url, windowId: id + 100, status: 'complete' };
       },
       async update() {},
       async remove() {},
@@ -88,7 +90,7 @@ function createChromeHarness({ failRetries = false } = {}) {
     },
   };
 
-  return { chrome, dispatch, providerBatches, applied, stored };
+  return { chrome, dispatch, providerBatches, createdProviderUrls, applied, stored };
 }
 
 async function loadBackground(chrome) {
@@ -106,6 +108,7 @@ test('background keeps streamed translations and retries only unfinished IDs', a
   assert.equal(result.ok, true);
   assert.equal(result.translated, 3);
   assert.deepEqual(harness.providerBatches, [['a'], ['b', 'c']]);
+  assert.deepEqual(harness.createdProviderUrls, ['https://chatgpt.com/']);
   assert.deepEqual(harness.applied, ['a', 'b', 'c']);
   assert.equal(harness.stored.translationJob.state, 'complete');
   assert.equal(harness.stored.translationJob.translated, 3);
