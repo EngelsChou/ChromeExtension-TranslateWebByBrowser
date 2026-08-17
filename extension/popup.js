@@ -64,6 +64,9 @@
     if (!job.total) return 5;
     return Math.max(5, Math.round((job.completed || 0) / job.total * 100));
   }
+  function firstResultCopy(job) {
+    return job.firstResultMs == null ? "" : `\uFF0C\u9996\u6279 ${Math.max(1, Math.ceil(job.firstResultMs / 1e3))} \u79D2`;
+  }
   async function checkStatus() {
     const provider = selectedProvider();
     setStatus("pending", `\u5DF2\u9078\u64C7 ${provider.name}`, "\u53EA\u6AA2\u67E5\u65E2\u6709\u5206\u9801\uFF0C\u4E0D\u6703\u81EA\u52D5\u958B\u555F\u670D\u52D9\u3002");
@@ -86,7 +89,7 @@
     if (message.state === "complete") {
       elements.progress.hidden = false;
       elements.progressBar.style.width = "100%";
-      setStatus("ok", "\u7FFB\u8B6F\u5B8C\u6210", `\u5DF2\u8655\u7406 ${message.translated}/${message.blocks} \u500B\u6BB5\u843D`);
+      setStatus("ok", "\u7FFB\u8B6F\u5B8C\u6210", `\u5DF2\u8655\u7406 ${message.translated}/${message.blocks} \u500B\u6BB5\u843D${firstResultCopy(message)}`);
       return;
     }
     elements.progress.hidden = false;
@@ -169,7 +172,7 @@
       } else if (job.state === "complete") {
         elements.progress.hidden = false;
         elements.progressBar.style.width = "100%";
-        setStatus("ok", "\u4E0A\u6B21\u7FFB\u8B6F\u5B8C\u6210", `\u5DF2\u8655\u7406 ${job.translated}/${job.blocks} \u500B\u6BB5\u843D`);
+        setStatus("ok", "\u4E0A\u6B21\u7FFB\u8B6F\u5B8C\u6210", `\u5DF2\u8655\u7406 ${job.translated}/${job.blocks} \u500B\u6BB5\u843D${firstResultCopy(job)}`);
       } else if (job.state === "error") {
         setStatus("error", "\u4E0A\u6B21\u7FFB\u8B6F\u5931\u6557", "\u53EF\u6309\u300C\u6062\u5FA9\u539F\u6587\u300D\u9084\u539F\u5DF2\u5B8C\u6210\u7684\u6279\u6B21\u3002");
         showError(job.error);

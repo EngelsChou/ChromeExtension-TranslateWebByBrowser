@@ -108,6 +108,7 @@ test('background keeps streamed translations and retries only unfinished IDs', a
 
   assert.equal(result.ok, true);
   assert.equal(result.translated, 3);
+  assert.equal(typeof result.firstResultMs, 'number');
   assert.deepEqual(harness.providerBatches, [['a'], ['b', 'c']]);
   assert.deepEqual(harness.createdProviderUrls, ['https://chatgpt.com/']);
   assert.deepEqual(harness.applied, ['a', 'b', 'c']);

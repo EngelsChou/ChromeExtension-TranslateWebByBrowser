@@ -9,10 +9,10 @@ import {
   withTimeout,
 } from './job-guard.js';
 import { getProvider, PROVIDERS } from './providers.js';
+import { providerWakeDelayMs } from './provider-timing.js';
 
 let translationQueue = Promise.resolve();
 const pendingRequests = new Map();
-const PROVIDER_WAKE_DELAY_MS = 8_000;
 
 async function activeTargetTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -210,7 +210,7 @@ async function noteFirstTranslation(context, targetTabId, targetWindowId) {
   await restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId);
 }
 
-function scheduleProviderWake(context, worker, batchIndex, retryAttempt) {
+function scheduleProviderWake(context, worker, providerId, batchIndex, retryAttempt) {
   if (batchIndex !== 0 || retryAttempt || !worker.windowId || context.providerWakeUsed) return null;
   return setTimeout(() => {
     if (context.firstResultAt || context.providerWakeUsed) return;
@@ -221,7 +221,7 @@ function scheduleProviderWake(context, worker, batchIndex, retryAttempt) {
       await chrome.windows.update(worker.windowId, { focused: true });
       context.workerFocusRaised = true;
     })().catch(() => {});
-  }, PROVIDER_WAKE_DELAY_MS);
+  }, providerWakeDelayMs(providerId));
 }
 
 function applyPartialTranslations(message, sender) {
@@ -254,6 +254,7 @@ function applyPartialTranslations(message, sender) {
       displayMode: pending.displayMode, completed: pending.batchIndex,
       total: pending.totalBatches, translated: pending.context.translated,
       blocks: pending.context.blocks, startedAt: pending.context.startedAt,
+      firstResultMs: pending.context.firstResultAt - pending.context.startedAt,
     }, pending.targetTabId);
     return result;
   });
@@ -331,7 +332,7 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
       appliedIds: new Set(), applyChain: Promise.resolve(),
     };
     pendingRequests.set(requestId, pending);
-    const wakeTimer = scheduleProviderWake(context, worker, batchIndex, retryAttempt);
+    const wakeTimer = scheduleProviderWake(context, worker, provider.id, batchIndex, retryAttempt);
     let failure;
     try {
       const timeoutMs = Math.min(PROVIDER_BATCH_TIMEOUT_MS, remainingJobTime);
@@ -399,6 +400,9 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
         scope, displayMode,
         completed: context.completed, total: batches.length, translated: context.translated,
         blocks: items.length,
+        firstResultMs: context.firstResultAt
+          ? context.firstResultAt - context.startedAt
+          : undefined,
         workerActive: worker.dedicated, warning: worker.warning, startedAt: context.startedAt,
       }, targetTab.id);
     }
@@ -406,7 +410,12 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
     await worker.close();
   }
 
-  return { translated: context.translated, total: items.length, batches: batches.length };
+  return {
+    translated: context.translated,
+    total: items.length,
+    batches: batches.length,
+    firstResultMs: context.firstResultAt ? context.firstResultAt - context.startedAt : undefined,
+  };
 }
 
 async function restorePage(providerId) {
@@ -426,6 +435,7 @@ function enqueueTranslation(providerId, options) {
         providerName: getProvider(providerId).name, ...options,
         completed: result.batches, total: result.batches,
         translated: result.translated, blocks: result.total,
+        firstResultMs: result.firstResultMs,
         message: result.message, startedAt: context.startedAt,
       }, context.targetTabId);
       return result;
@@ -435,7 +445,11 @@ function enqueueTranslation(providerId, options) {
         providerName: getProvider(providerId).name, ...options, error: error.message,
         completed: context.completed ?? 0, total: context.total ?? 0,
         translated: context.translated ?? 0,
-        blocks: context.blocks ?? 0, startedAt: context.startedAt,
+        blocks: context.blocks ?? 0,
+        firstResultMs: context.firstResultAt
+          ? context.firstResultAt - context.startedAt
+          : undefined,
+        startedAt: context.startedAt,
       }, context.targetTabId);
       throw error;
     }

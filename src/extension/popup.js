@@ -44,6 +44,10 @@ function progressPercent(job) {
   return Math.max(5, Math.round(((job.completed || 0) / job.total) * 100));
 }
 
+function firstResultCopy(job) {
+  return job.firstResultMs == null ? '' : `，首批 ${Math.max(1, Math.ceil(job.firstResultMs / 1000))} 秒`;
+}
+
 async function checkStatus() {
   const provider = selectedProvider();
   setStatus('pending', `已選擇 ${provider.name}`, '只檢查既有分頁，不會自動開啟服務。');
@@ -67,7 +71,7 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message.state === 'complete') {
     elements.progress.hidden = false;
     elements.progressBar.style.width = '100%';
-    setStatus('ok', '翻譯完成', `已處理 ${message.translated}/${message.blocks} 個段落`);
+    setStatus('ok', '翻譯完成', `已處理 ${message.translated}/${message.blocks} 個段落${firstResultCopy(message)}`);
     return;
   }
   elements.progress.hidden = false;
@@ -158,7 +162,7 @@ async function initialize() {
     } else if (job.state === 'complete') {
       elements.progress.hidden = false;
       elements.progressBar.style.width = '100%';
-      setStatus('ok', '上次翻譯完成', `已處理 ${job.translated}/${job.blocks} 個段落`);
+      setStatus('ok', '上次翻譯完成', `已處理 ${job.translated}/${job.blocks} 個段落${firstResultCopy(job)}`);
     } else if (job.state === 'error') {
       setStatus('error', '上次翻譯失敗', '可按「恢復原文」還原已完成的批次。');
       showError(job.error);

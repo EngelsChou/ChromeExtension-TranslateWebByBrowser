@@ -133,10 +133,16 @@
     return provider;
   }
 
+  // src/extension/provider-timing.js
+  var CHATGPT_WAKE_DELAY_MS = 8e3;
+  var M365_WAKE_DELAY_MS = 750;
+  function providerWakeDelayMs(providerId) {
+    return providerId === "m365" ? M365_WAKE_DELAY_MS : CHATGPT_WAKE_DELAY_MS;
+  }
+
   // src/extension/background.js
   var translationQueue = Promise.resolve();
   var pendingRequests = /* @__PURE__ */ new Map();
-  var PROVIDER_WAKE_DELAY_MS = 8e3;
   async function activeTargetTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("\u627E\u4E0D\u5230\u76EE\u524D\u4F5C\u7528\u4E2D\u7684\u5206\u9801\u3002");
@@ -342,7 +348,7 @@
     context.firstResultAt = Date.now();
     await restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId);
   }
-  function scheduleProviderWake(context, worker, batchIndex, retryAttempt) {
+  function scheduleProviderWake(context, worker, providerId, batchIndex, retryAttempt) {
     if (batchIndex !== 0 || retryAttempt || !worker.windowId || context.providerWakeUsed) return null;
     return setTimeout(() => {
       if (context.firstResultAt || context.providerWakeUsed) return;
@@ -354,7 +360,7 @@
         context.workerFocusRaised = true;
       })().catch(() => {
       });
-    }, PROVIDER_WAKE_DELAY_MS);
+    }, providerWakeDelayMs(providerId));
   }
   function applyPartialTranslations(message, sender) {
     const pending = pendingRequests.get(message.requestId);
@@ -394,7 +400,8 @@
         total: pending.totalBatches,
         translated: pending.context.translated,
         blocks: pending.context.blocks,
-        startedAt: pending.context.startedAt
+        startedAt: pending.context.startedAt,
+        firstResultMs: pending.context.firstResultAt - pending.context.startedAt
       }, pending.targetTabId);
       return result;
     });
@@ -498,7 +505,7 @@
         applyChain: Promise.resolve()
       };
       pendingRequests.set(requestId, pending);
-      const wakeTimer = scheduleProviderWake(context, worker, batchIndex, retryAttempt);
+      const wakeTimer = scheduleProviderWake(context, worker, provider.id, batchIndex, retryAttempt);
       let failure;
       try {
         const timeoutMs = Math.min(PROVIDER_BATCH_TIMEOUT_MS, remainingJobTime);
@@ -580,6 +587,7 @@
           total: batches.length,
           translated: context.translated,
           blocks: items.length,
+          firstResultMs: context.firstResultAt ? context.firstResultAt - context.startedAt : void 0,
           workerActive: worker.dedicated,
           warning: worker.warning,
           startedAt: context.startedAt
@@ -588,7 +596,12 @@
     } finally {
       await worker.close();
     }
-    return { translated: context.translated, total: items.length, batches: batches.length };
+    return {
+      translated: context.translated,
+      total: items.length,
+      batches: batches.length,
+      firstResultMs: context.firstResultAt ? context.firstResultAt - context.startedAt : void 0
+    };
   }
   async function restorePage(providerId) {
     getProvider(providerId);
@@ -611,6 +624,7 @@
           total: result.batches,
           translated: result.translated,
           blocks: result.total,
+          firstResultMs: result.firstResultMs,
           message: result.message,
           startedAt: context.startedAt
         }, context.targetTabId);
@@ -627,6 +641,7 @@
           total: context.total ?? 0,
           translated: context.translated ?? 0,
           blocks: context.blocks ?? 0,
+          firstResultMs: context.firstResultAt ? context.firstResultAt - context.startedAt : void 0,
           startedAt: context.startedAt
         }, context.targetTabId);
         throw error;

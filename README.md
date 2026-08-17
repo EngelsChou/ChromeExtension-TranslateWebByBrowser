@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.12.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.13.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -29,7 +29,7 @@ ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsof
 
 開始翻譯後，Extension 會以共享的登入狀態開啟 provider 官方首頁的乾淨新對話，再放入不搶走原網頁焦點的獨立工作視窗中執行 ChatGPT 或 M365。工作頁不會複製自訂 GPT、專案或既有對話，避免繼承額外指示與歷史造成延遲。這讓 provider 頁面保持為該視窗的作用中分頁，減少背景分頁停止重繪而必須手動切換分頁的情況；工作完成後視窗會自動關閉。若 Chrome 無法建立工作視窗，會改用同樣乾淨的 provider 首頁背景分頁並在進度中顯示警告；只有連乾淨備援頁也無法建立時，才最後回退既有分頁。
 
-若第一批超過 8 秒仍沒有任何有效中文，而且使用者仍停留在原本的 Chrome 視窗，Extension 會自動短暫喚醒 provider 工作視窗；收到第一筆翻譯後立即切回原網頁。這用來處理 ChatGPT／M365 在被遮住的背景視窗暫停更新 DOM 的情況。若使用者已切到遊戲或其他應用程式，Extension 不會搶走系統焦點。
+Extension 會依 provider 採用不同的背景喚醒時間：ChatGPT 在第一批超過 8 秒仍沒有有效中文時喚醒；M365 因背景工作視窗更容易延遲，送出後約 1 秒便短暫喚醒。收到第一筆翻譯後會立即切回原網頁，進度卡與 popup 也會顯示實際「首批 N 秒」。只有使用者仍停留在原本的 Chrome 視窗時才會喚醒；若已切到遊戲或其他應用程式，Extension 不會搶走系統焦點。
 
 ## 段落級架構
 
@@ -106,7 +106,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.12.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.13.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -125,7 +125,7 @@ build 會更新可直接載入且納入版本控制的 `extension/`，並複製�
 - M365 的 Lexical/contenteditable composer 會等待非同步 paste 完成，再決定是否使用乾淨的 `insertText` 備援，避免同一提示被插入兩次。每種寫入方式之間都會先清空舊內容；送出前會解析並比對 `INPUT`／`INPUT_JSON` payload，確認資料完整且只出現一次。按下傳送後必須在短時間內確認輸入框清空或開始產生回覆，否則會使用 Enter 備援並快速失敗重試，不再空等整個批次。
 - ChatGPT 或 M365 若只完成部分段落，已驗證的中文會立即保留；逾時或格式錯誤後只重送剩餘段落，並以新工作視窗避免沿用故障中的對話狀態。
 - 實際等待時間仍取決於 provider、帳號負載與網路。獨立 provider 工作視窗會保持為作用中分頁且不搶走原網頁焦點，以降低必須手動切換分頁才顯示回覆的情況。
-- 遠端網頁 provider 無法保證每次都在 5 秒內完成。本機 Microsoft Learn 可視區 8 段實測：ChatGPT 約 3.5 秒全部完成；M365 約 16.5 秒，因其網頁 UI 直到回覆完成才提供可讀內容。
+- 遠端網頁 provider 無法保證固定秒數。v0.8.12 在 Microsoft Learn 66 段實測中，ChatGPT 第一批約 8–9 秒、全頁約 86 秒；M365 全頁約 177 秒。v0.8.13 將 M365 喚醒提前至約 1 秒，目標是縮短第一批體感，實際時間仍取決於公司帳號、網路與 Copilot 當下負載，並會直接顯示在進度卡。
 
 ---
 
@@ -139,7 +139,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.12.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.13.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -170,7 +170,7 @@ ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/cha
 
 During translation, the extension opens a clean new conversation at the provider's official home URL using the shared signed-in session, then runs it in a dedicated worker window without taking focus from the original page. It does not duplicate a custom GPT, project, or existing conversation, avoiding inherited instructions and history that can delay translation. The provider remains the active tab in that window, reducing cases where background rendering pauses until the user switches tabs. The worker closes automatically when the job finishes. If Chrome cannot create it, the extension uses another clean provider-home background tab and reports a progress warning; it falls back to the existing provider tab only when that clean fallback also cannot be created.
 
-If the first batch produces no validated Chinese after 8 seconds and the user is still in the original Chrome window, the extension briefly surfaces the provider worker and automatically returns to the source page as soon as the first translation arrives. This wakes ChatGPT or M365 when an occluded background window has paused DOM updates. If the user has switched to a game or another application, the extension does not take system focus.
+The extension uses provider-specific background wake timing. ChatGPT is surfaced when its first batch has produced no validated Chinese after 8 seconds; M365 is surfaced about 1 second after submission because its background worker is more prone to delay. The source page is restored as soon as the first translation arrives, and the progress card and popup report the measured “first batch N seconds.” This happens only while the user remains in the original Chrome window; switching to a game or another application prevents the extension from taking system focus.
 
 ## Block-level architecture
 
@@ -237,7 +237,7 @@ Web text is untrusted data; the prompt explicitly ignores embedded instructions.
 - Very long blocks, provider limits, or invalid JSON may time out. A provider response is limited to 55 seconds, a background batch to 120 seconds, and the whole job to 8 minutes. Stored work with no progress for 150 seconds is marked failed instead of displaying an hours- or days-long timer.
 - On a batch failure, already applied Chinese remains visible. Only unfinished IDs are split into smaller retry batches, up to two levels; a final error reports the remaining count and still allows retry or restore.
 - Translation speed still depends on the selected provider, account capacity, and network. The on-page timer distinguishes provider waiting from a stalled extension.
-- A 5-second result cannot be guaranteed for remote web providers. In the documented Microsoft Learn viewport smoke test, ChatGPT completed eight visible blocks in about 3.5 seconds, while M365 took about 16.5 seconds because its web UI exposed the response only after completion.
+- Remote web providers cannot guarantee a fixed latency. In the v0.8.12 66-block Microsoft Learn run, ChatGPT showed its first batch in about 8–9 seconds and finished in about 86 seconds; M365 finished in about 177 seconds. v0.8.13 wakes M365 after about 1 second to reduce first-result latency, but the measured time still depends on the company account, network, and current Copilot load and is shown directly in the progress card.
 
 ## Development
 
@@ -249,7 +249,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.12.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.13.zip`.
 
 ## YouTube captions and transcripts
 

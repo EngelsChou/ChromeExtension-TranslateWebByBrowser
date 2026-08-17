@@ -9,6 +9,7 @@ const contentSource = await readFile(new URL('../src/extension/content-entry.js'
 const chatgptSource = await readFile(new URL('../src/extension/chatgpt-content-entry.js', import.meta.url), 'utf8');
 const m365Source = await readFile(new URL('../src/extension/m365-content-entry.js', import.meta.url), 'utf8');
 const jobGuardSource = await readFile(new URL('../src/extension/job-guard.js', import.meta.url), 'utf8');
+const providerTimingSource = await readFile(new URL('../src/extension/provider-timing.js', import.meta.url), 'utf8');
 const popupHtml = await readFile(new URL('../extension/popup.html', import.meta.url), 'utf8');
 
 test('ships a self-contained Manifest V3 provider-tab extension', () => {
@@ -144,7 +145,9 @@ test('translation runs in an unfocused active provider worker window and cleans 
 });
 
 test('a stalled first provider batch is briefly surfaced only while the target Chrome window is focused', () => {
-  assert.match(backgroundSource, /PROVIDER_WAKE_DELAY_MS = 8_000/u);
+  assert.match(providerTimingSource, /CHATGPT_WAKE_DELAY_MS = 8_000/u);
+  assert.match(providerTimingSource, /M365_WAKE_DELAY_MS = 750/u);
+  assert.match(backgroundSource, /providerWakeDelayMs\(providerId\)/u);
   assert.match(backgroundSource, /chrome\.windows\.get\(context\.targetWindowId\)/u);
   assert.match(backgroundSource, /if \(!targetWindow\?\.focused\) return/u);
   assert.match(backgroundSource, /chrome\.windows\.update\(worker\.windowId, \{ focused: true \}\)/u);

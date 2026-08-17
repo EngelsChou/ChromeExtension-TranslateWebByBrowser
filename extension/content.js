@@ -234,14 +234,16 @@
     }, progressCopy = function(job) {
       const provider = job.providerName || (job.provider === "m365" ? "Microsoft 365 Copilot" : "ChatGPT");
       const elapsed = job.startedAt ? Math.max(0, Math.floor((Date.now() - job.startedAt) / 1e3)) : 0;
+      const firstResult = job.firstResultMs != null ? `\u9996\u6279 ${Math.max(1, Math.ceil(job.firstResultMs / 1e3))} \u79D2` : "";
       if (job.state === "error") return ["\u7FFB\u8B6F\u5931\u6557", job.error || "\u8ACB\u7A0D\u5F8C\u518D\u8A66\u3002"];
       if (job.state === "complete") {
-        return ["\u7FFB\u8B6F\u5B8C\u6210", job.message || `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`];
+        const detail = job.message || `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`;
+        return ["\u7FFB\u8B6F\u5B8C\u6210", firstResult ? `${detail} \xB7 ${firstResult}` : detail];
       }
       if (job.stage === "collecting") return ["\u6B63\u5728\u5206\u6790\u7DB2\u9801\u5167\u5BB9\u2026", `\u5DF2\u7D93\u904E ${elapsed} \u79D2`];
       if (job.stage === "connecting") return [`\u6B63\u5728\u9023\u63A5 ${provider}\u2026`, `\u5DF2\u627E\u5230 ${job.blocks || 0} \u500B\u82F1\u6587\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
       if (job.stage === "streaming") {
-        return ["\u53EF\u8996\u5340\u7FFB\u8B6F\u5DF2\u958B\u59CB\u986F\u793A", `\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
+        return ["\u53EF\u8996\u5340\u7FFB\u8B6F\u5DF2\u958B\u59CB\u986F\u793A", `${firstResult} \xB7 \u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D \xB7 ${elapsed} \u79D2`];
       }
       if (job.stage === "applied") {
         return [`\u5DF2\u986F\u793A ${job.translated || 0}/${job.blocks || 0} \u500B\u6BB5\u843D`, `\u7E7C\u7E8C\u7FFB\u8B6F\u7B2C ${Math.min((job.completed || 0) + 1, job.total || 1)}/${job.total || 1} \u6279 \xB7 ${elapsed} \u79D2`];

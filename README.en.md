@@ -6,7 +6,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.12.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.13.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -35,7 +35,7 @@ ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/cha
 
 During translation, the extension opens a clean new conversation at the provider's official home URL using the shared signed-in session, then runs it in a dedicated worker window without taking focus from the original page. It does not duplicate a custom GPT, project, or existing conversation, avoiding inherited instructions and history that can delay translation. The provider remains the active tab in that window, reducing cases where background rendering pauses until the user switches tabs. The worker closes automatically when the job finishes. If Chrome cannot create it, the extension uses another clean provider-home background tab and reports a progress warning; it falls back to the existing provider tab only when that clean fallback also cannot be created.
 
-If the first batch produces no validated Chinese after 8 seconds and the user is still in the original Chrome window, the extension briefly surfaces the provider worker and automatically returns to the source page as soon as the first translation arrives. This wakes ChatGPT or M365 when an occluded background window has paused DOM updates. If the user has switched to a game or another application, the extension does not take system focus.
+The extension uses provider-specific background wake timing. ChatGPT is surfaced when its first batch has produced no validated Chinese after 8 seconds; M365 is surfaced about 1 second after submission because its background worker is more prone to delay. The source page is restored as soon as the first translation arrives, and the progress card and popup report the measured “first batch N seconds.” This happens only while the user remains in the original Chrome window; switching to a game or another application prevents the extension from taking system focus.
 
 The M365 Lexical/contenteditable composer waits for asynchronous paste handling to settle before attempting a clean `insertText` fallback, preventing the same prompt from being inserted twice. It clears the previous attempt before every fallback and parses the `INPUT` / `INPUT_JSON` payload before submission to confirm the data is complete and appears exactly once. After clicking Send, it requires the composer to clear or generation to start within a few seconds; otherwise it tries Enter as a fallback and fails quickly for retry instead of waiting for the entire batch timeout.
 
@@ -104,7 +104,7 @@ Web text is untrusted data; the prompt explicitly ignores embedded instructions.
 - Very long blocks, provider limits, or invalid JSON may time out. A provider response is limited to 55 seconds, a background batch to 120 seconds, and the whole job to 8 minutes. Stored work with no progress for 150 seconds is marked failed instead of displaying an hours- or days-long timer.
 - On a batch failure, already applied Chinese remains visible. Only unfinished IDs are split into smaller retry batches, up to two levels; a final error reports the remaining count and still allows retry or restore.
 - Translation speed still depends on the selected provider, account capacity, and network. The on-page timer distinguishes provider waiting from a stalled extension.
-- A 5-second result cannot be guaranteed for remote web providers. In the documented Microsoft Learn viewport smoke test, ChatGPT completed eight visible blocks in about 3.5 seconds, while M365 took about 16.5 seconds because its web UI exposed the response only after completion.
+- Remote web providers cannot guarantee a fixed latency. In the v0.8.12 66-block Microsoft Learn run, ChatGPT showed its first batch in about 8–9 seconds and finished in about 86 seconds; M365 finished in about 177 seconds. v0.8.13 wakes M365 after about 1 second to reduce first-result latency, but the measured time still depends on the company account, network, and current Copilot load and is shown directly in the progress card.
 
 ## Development
 
@@ -116,7 +116,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.12.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.13.zip`.
 
 ## YouTube captions and transcripts
 

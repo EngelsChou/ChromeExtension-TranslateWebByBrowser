@@ -69,14 +69,18 @@ if (!globalThis.__translateWebContentReady) {
   function progressCopy(job) {
     const provider = job.providerName || (job.provider === 'm365' ? 'Microsoft 365 Copilot' : 'ChatGPT');
     const elapsed = job.startedAt ? Math.max(0, Math.floor((Date.now() - job.startedAt) / 1000)) : 0;
+    const firstResult = job.firstResultMs != null
+      ? `首批 ${Math.max(1, Math.ceil(job.firstResultMs / 1000))} 秒`
+      : '';
     if (job.state === 'error') return ['翻譯失敗', job.error || '請稍後再試。'];
     if (job.state === 'complete') {
-      return ['翻譯完成', job.message || `已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落`];
+      const detail = job.message || `已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落`;
+      return ['翻譯完成', firstResult ? `${detail} · ${firstResult}` : detail];
     }
     if (job.stage === 'collecting') return ['正在分析網頁內容…', `已經過 ${elapsed} 秒`];
     if (job.stage === 'connecting') return [`正在連接 ${provider}…`, `已找到 ${job.blocks || 0} 個英文段落 · ${elapsed} 秒`];
     if (job.stage === 'streaming') {
-      return ['可視區翻譯已開始顯示', `已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落 · ${elapsed} 秒`];
+      return ['可視區翻譯已開始顯示', `${firstResult} · 已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落 · ${elapsed} 秒`];
     }
     if (job.stage === 'applied') {
       return [`已顯示 ${job.translated || 0}/${job.blocks || 0} 個段落`, `繼續翻譯第 ${Math.min((job.completed || 0) + 1, job.total || 1)}/${job.total || 1} 批 · ${elapsed} 秒`];
