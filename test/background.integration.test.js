@@ -34,6 +34,7 @@ function createChromeHarness({ failRetries = false } = {}) {
     },
     scripting: { async executeScript() {} },
     windows: {
+      async get() { return { focused: true }; },
       async create() { return { id: nextWorkerId + 100 }; },
       async update() {},
       async remove() {},

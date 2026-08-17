@@ -6,7 +6,7 @@
 
 ## 安裝（一般使用者不需要 npm）
 
-1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.11.zip`。
+1. 下載並解壓縮 `translate-web-by-browser-ai-v0.8.12.zip`。
 2. 開啟 `chrome://extensions`，啟用「開發人員模式」。
 3. 選擇「載入未封裝項目」：
    - 發布 ZIP：選擇解壓縮後直接含有 `manifest.json` 的資料夾。
@@ -28,6 +28,8 @@
 ChatGPT 使用 `https://chatgpt.com/`；M365 使用 `https://m365.cloud.microsoft/chat/`。若 provider 輸入框已有草稿，Extension 會建立新對話，避免覆寫使用者內容。
 
 開始翻譯後，Extension 會以共享的登入狀態開啟 provider 官方首頁的乾淨新對話，再放入不搶走原網頁焦點的獨立工作視窗中執行 ChatGPT 或 M365。工作頁不會複製自訂 GPT、專案或既有對話，避免繼承額外指示與歷史造成延遲。這讓 provider 頁面保持為該視窗的作用中分頁，減少背景分頁停止重繪而必須手動切換分頁的情況；工作完成後視窗會自動關閉。若 Chrome 無法建立工作視窗，會改用同樣乾淨的 provider 首頁背景分頁並在進度中顯示警告；只有連乾淨備援頁也無法建立時，才最後回退既有分頁。
+
+若第一批超過 8 秒仍沒有任何有效中文，而且使用者仍停留在原本的 Chrome 視窗，Extension 會自動短暫喚醒 provider 工作視窗；收到第一筆翻譯後立即切回原網頁。這用來處理 ChatGPT／M365 在被遮住的背景視窗暫停更新 DOM 的情況。若使用者已切到遊戲或其他應用程式，Extension 不會搶走系統焦點。
 
 ## 段落級架構
 
@@ -104,7 +106,7 @@ npm run check
 npm run package
 ```
 
-build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.11.zip`。
+build 會更新可直接載入且納入版本控制的 `extension/`，並複製發布內容至 `dist/extension/`。發布 ZIP 位於 `dist/release/translate-web-by-browser-ai-v0.8.12.zip`。
 
 ## YouTube 字幕與文字記錄
 
@@ -137,7 +139,7 @@ A directly loadable Manifest V3 Chrome Extension. It identifies primary webpage 
 
 ## Installation (regular users do not need npm)
 
-1. Download and extract `translate-web-by-browser-ai-v0.8.11.zip`.
+1. Download and extract `translate-web-by-browser-ai-v0.8.12.zip`.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Select **Load unpacked**:
    - Release ZIP: choose the extracted folder containing `manifest.json`.
@@ -167,6 +169,8 @@ The M365 Lexical/contenteditable composer waits for asynchronous paste handling 
 ChatGPT uses `https://chatgpt.com/`; M365 uses `https://m365.cloud.microsoft/chat/`. If the provider composer contains a draft, the extension opens a fresh conversation instead of overwriting it.
 
 During translation, the extension opens a clean new conversation at the provider's official home URL using the shared signed-in session, then runs it in a dedicated worker window without taking focus from the original page. It does not duplicate a custom GPT, project, or existing conversation, avoiding inherited instructions and history that can delay translation. The provider remains the active tab in that window, reducing cases where background rendering pauses until the user switches tabs. The worker closes automatically when the job finishes. If Chrome cannot create it, the extension uses another clean provider-home background tab and reports a progress warning; it falls back to the existing provider tab only when that clean fallback also cannot be created.
+
+If the first batch produces no validated Chinese after 8 seconds and the user is still in the original Chrome window, the extension briefly surfaces the provider worker and automatically returns to the source page as soon as the first translation arrives. This wakes ChatGPT or M365 when an occluded background window has paused DOM updates. If the user has switched to a game or another application, the extension does not take system focus.
 
 ## Block-level architecture
 
@@ -245,7 +249,7 @@ npm run check
 npm run package
 ```
 
-The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.11.zip`.
+The build updates the directly loadable, version-controlled `extension/` folder and copies release files to `dist/extension/`. The release ZIP is `dist/release/translate-web-by-browser-ai-v0.8.12.zip`.
 
 ## YouTube captions and transcripts
 

@@ -136,6 +136,7 @@
   // src/extension/background.js
   var translationQueue = Promise.resolve();
   var pendingRequests = /* @__PURE__ */ new Map();
+  var PROVIDER_WAKE_DELAY_MS = 8e3;
   async function activeTargetTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error("\u627E\u4E0D\u5230\u76EE\u524D\u4F5C\u7528\u4E2D\u7684\u5206\u9801\u3002");
@@ -220,6 +221,7 @@
       return {
         tab: workerTab,
         dedicated: true,
+        windowId: workerWindow.id,
         async close() {
           try {
             await chrome.windows.remove(workerWindow.id);
@@ -322,6 +324,38 @@
     }
     return job;
   }
+  async function restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId) {
+    try {
+      await context.workerWakePromise;
+    } catch {
+    }
+    if (!context.workerFocusRaised) return;
+    context.workerFocusRaised = false;
+    try {
+      await chrome.tabs.update(targetTabId, { active: true });
+      await chrome.windows.update(targetWindowId, { focused: true });
+    } catch {
+    }
+  }
+  async function noteFirstTranslation(context, targetTabId, targetWindowId) {
+    if (context.firstResultAt) return;
+    context.firstResultAt = Date.now();
+    await restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId);
+  }
+  function scheduleProviderWake(context, worker, batchIndex, retryAttempt) {
+    if (batchIndex !== 0 || retryAttempt || !worker.windowId || context.providerWakeUsed) return null;
+    return setTimeout(() => {
+      if (context.firstResultAt || context.providerWakeUsed) return;
+      context.providerWakeUsed = true;
+      context.workerWakePromise = (async () => {
+        const targetWindow = await chrome.windows.get(context.targetWindowId);
+        if (!targetWindow?.focused) return;
+        await chrome.windows.update(worker.windowId, { focused: true });
+        context.workerFocusRaised = true;
+      })().catch(() => {
+      });
+    }, PROVIDER_WAKE_DELAY_MS);
+  }
   function applyPartialTranslations(message, sender) {
     const pending = pendingRequests.get(message.requestId);
     if (!pending || sender.tab?.id !== pending.providerTabId) return Promise.resolve({ ignored: true });
@@ -344,6 +378,11 @@
         pending.context.appliedIds.add(id);
       });
       pending.context.translated = (pending.context.translated ?? 0) + result.applied;
+      await noteFirstTranslation(
+        pending.context,
+        pending.targetTabId,
+        pending.targetWindowId
+      );
       updateJob({
         state: "running",
         stage: "streaming",
@@ -365,6 +404,7 @@
     const provider = getProvider(providerId);
     const targetTab = await activeTargetTab();
     context.targetTabId = targetTab.id;
+    context.targetWindowId = targetTab.windowId;
     context.startedAt = Date.now();
     context.deadline = context.startedAt + TRANSLATION_JOB_TIMEOUT_MS;
     context.appliedIds = /* @__PURE__ */ new Set();
@@ -447,6 +487,7 @@
         providerTabId: worker.tab.id,
         provider,
         targetTabId: targetTab.id,
+        targetWindowId: targetTab.windowId,
         batch: outstanding,
         batchIndex,
         totalBatches: batches.length,
@@ -457,6 +498,7 @@
         applyChain: Promise.resolve()
       };
       pendingRequests.set(requestId, pending);
+      const wakeTimer = scheduleProviderWake(context, worker, batchIndex, retryAttempt);
       let failure;
       try {
         const timeoutMs = Math.min(PROVIDER_BATCH_TIMEOUT_MS, remainingJobTime);
@@ -480,6 +522,7 @@
           }
           unapplied.forEach(({ id }) => context.appliedIds.add(id));
           context.translated += applyResult.applied;
+          await noteFirstTranslation(context, targetTab.id, targetTab.windowId);
         }
       } catch (error) {
         failure = error;
@@ -490,6 +533,7 @@
           failure ??= error;
         }
         pendingRequests.delete(requestId);
+        if (wakeTimer) clearTimeout(wakeTimer);
       }
       if (!failure) return;
       const remaining = remainingItems(outstanding, context.appliedIds);

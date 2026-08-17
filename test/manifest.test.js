@@ -143,6 +143,14 @@ test('translation runs in an unfocused active provider worker window and cleans 
   assert.match(backgroundSource, /await worker\.close\(\)/u);
 });
 
+test('a stalled first provider batch is briefly surfaced only while the target Chrome window is focused', () => {
+  assert.match(backgroundSource, /PROVIDER_WAKE_DELAY_MS = 8_000/u);
+  assert.match(backgroundSource, /chrome\.windows\.get\(context\.targetWindowId\)/u);
+  assert.match(backgroundSource, /if \(!targetWindow\?\.focused\) return/u);
+  assert.match(backgroundSource, /chrome\.windows\.update\(worker\.windowId, \{ focused: true \}\)/u);
+  assert.match(backgroundSource, /restoreTargetAfterWorkerWake/u);
+});
+
 test('ChatGPT composer integration updates React state and fails fast before an unsent retry', () => {
   assert.match(chatgptSource, /ClipboardEvent\('paste'/u);
   assert.match(chatgptSource, /new InputEvent\('input'/u);

@@ -12,6 +12,7 @@ import { getProvider, PROVIDERS } from './providers.js';
 
 let translationQueue = Promise.resolve();
 const pendingRequests = new Map();
+const PROVIDER_WAKE_DELAY_MS = 8_000;
 
 async function activeTargetTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -103,6 +104,7 @@ async function createProviderWorker(provider, sourceTab, targetTab) {
     return {
       tab: workerTab,
       dedicated: true,
+      windowId: workerWindow.id,
       async close() {
         try { await chrome.windows.remove(workerWindow.id); } catch { /* already closed */ }
       },
@@ -192,6 +194,36 @@ function updateJob(detail, targetTabId) {
   return job;
 }
 
+async function restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId) {
+  try { await context.workerWakePromise; } catch { /* wake is best-effort */ }
+  if (!context.workerFocusRaised) return;
+  context.workerFocusRaised = false;
+  try {
+    await chrome.tabs.update(targetTabId, { active: true });
+    await chrome.windows.update(targetWindowId, { focused: true });
+  } catch { /* the user may have closed or moved the target */ }
+}
+
+async function noteFirstTranslation(context, targetTabId, targetWindowId) {
+  if (context.firstResultAt) return;
+  context.firstResultAt = Date.now();
+  await restoreTargetAfterWorkerWake(context, targetTabId, targetWindowId);
+}
+
+function scheduleProviderWake(context, worker, batchIndex, retryAttempt) {
+  if (batchIndex !== 0 || retryAttempt || !worker.windowId || context.providerWakeUsed) return null;
+  return setTimeout(() => {
+    if (context.firstResultAt || context.providerWakeUsed) return;
+    context.providerWakeUsed = true;
+    context.workerWakePromise = (async () => {
+      const targetWindow = await chrome.windows.get(context.targetWindowId);
+      if (!targetWindow?.focused) return;
+      await chrome.windows.update(worker.windowId, { focused: true });
+      context.workerFocusRaised = true;
+    })().catch(() => {});
+  }, PROVIDER_WAKE_DELAY_MS);
+}
+
 function applyPartialTranslations(message, sender) {
   const pending = pendingRequests.get(message.requestId);
   if (!pending || sender.tab?.id !== pending.providerTabId) return Promise.resolve({ ignored: true });
@@ -213,6 +245,9 @@ function applyPartialTranslations(message, sender) {
       pending.context.appliedIds.add(id);
     });
     pending.context.translated = (pending.context.translated ?? 0) + result.applied;
+    await noteFirstTranslation(
+      pending.context, pending.targetTabId, pending.targetWindowId,
+    );
     updateJob({
       state: 'running', stage: 'streaming', provider: pending.provider.id,
       providerName: pending.provider.name, scope: pending.scope,
@@ -229,6 +264,7 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
   const provider = getProvider(providerId);
   const targetTab = await activeTargetTab();
   context.targetTabId = targetTab.id;
+  context.targetWindowId = targetTab.windowId;
   context.startedAt = Date.now();
   context.deadline = context.startedAt + TRANSLATION_JOB_TIMEOUT_MS;
   context.appliedIds = new Set();
@@ -290,10 +326,12 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
     const requestId = crypto.randomUUID();
     const pending = {
       requestId, providerTabId: worker.tab.id, provider, targetTabId: targetTab.id,
-      batch: outstanding, batchIndex, totalBatches: batches.length, displayMode, scope, context,
+      targetWindowId: targetTab.windowId, batch: outstanding, batchIndex,
+      totalBatches: batches.length, displayMode, scope, context,
       appliedIds: new Set(), applyChain: Promise.resolve(),
     };
     pendingRequests.set(requestId, pending);
+    const wakeTimer = scheduleProviderWake(context, worker, batchIndex, retryAttempt);
     let failure;
     try {
       const timeoutMs = Math.min(PROVIDER_BATCH_TIMEOUT_MS, remainingJobTime);
@@ -313,6 +351,7 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
         }
         unapplied.forEach(({ id }) => context.appliedIds.add(id));
         context.translated += applyResult.applied;
+        await noteFirstTranslation(context, targetTab.id, targetTab.windowId);
       }
     } catch (error) {
       failure = error;
@@ -323,6 +362,7 @@ async function translatePage(providerId, { scope = 'main', displayMode = 'biling
         failure ??= error;
       }
       pendingRequests.delete(requestId);
+      if (wakeTimer) clearTimeout(wakeTimer);
     }
 
     if (!failure) return;
